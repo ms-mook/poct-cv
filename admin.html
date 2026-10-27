@@ -6,6 +6,7 @@
 <meta name="robots" content="noindex,nofollow">
 <title>Admin | บันทึก %CV POCT Glucose</title>
 <link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/svg+xml" href="img/favicon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="img/favicon-32.png">
 <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
@@ -21,8 +22,8 @@
 
 <header class="sticky top-0 z-40 px-3 lg:px-6 pt-3">
   <div class="glass mx-auto flex max-w-none items-center gap-3 px-3 lg:px-6 py-2">
-    <img src="img/icon-192.png" alt="POCT %CV" width="40" height="40" class="h-10 w-10 flex-none rounded-xl bg-white object-contain p-0.5 shadow">
-    <span class="min-w-0 leading-tight"><span class="block truncate text-base font-extrabold">จัดการข้อมูล %CV</span><span class="hidden truncate text-xs opacity-70 sm:block">หน้าสำหรับผู้ดูแลระบบ · POCT Glucose · รพ.ศรีนครินทร์</span></span>
+    <img src="img/icon-192.png" alt="POCT %CV" width="56" height="56" class="h-12 w-12 flex-none rounded-2xl bg-white object-contain p-0.5 shadow sm:h-14 sm:w-14">
+    <span class="min-w-0 leading-tight"><span class="block truncate text-base font-extrabold sm:text-lg">จัดการข้อมูล %CV</span><span class="hidden truncate text-xs opacity-70 sm:block">หน้าสำหรับผู้ดูแลระบบ · POCT Glucose · รพ.ศรีนครินทร์</span></span>
     <div class="ml-auto flex items-center gap-1">
       <button class="btn btn-ghost btn-sm btn-square" id="btnTheme" type="button" aria-label="สลับโหมดมืด/สว่าง"><i data-i="moon" data-c="icon-lg"></i></button>
       <a class="btn btn-ghost btn-sm gap-1" href="index.html"><i data-i="arrow-left"></i><span class="hidden sm:inline">กลับ Dashboard</span></a>
@@ -36,7 +37,7 @@
   <!-- login -->
   <section class="mx-auto mt-6 max-w-md" id="loginView">
     <form class="glass pop grid gap-4 p-6" id="loginForm" autocomplete="off">
-      <div class="flex items-center gap-3"><img src="img/icon-192.png" alt="" width="48" height="48" class="h-12 w-12 rounded-2xl bg-white object-contain p-0.5 shadow">
+      <div class="flex items-center gap-3"><img src="img/icon-192.png" alt="" width="64" height="64" class="h-16 w-16 rounded-2xl bg-white object-contain p-0.5 shadow">
         <div><h1 class="text-xl font-extrabold">เข้าสู่ระบบผู้ดูแล</h1><p class="text-sm opacity-70">รหัสผ่านตั้งไว้ใน Vercel (ADMIN_PASSWORD)</p></div></div>
       <label class="form-control"><span class="label-text mb-1 font-semibold">รหัสผ่าน</span>
         <span class="input input-bordered flex items-center gap-2 bg-transparent"><i data-i="lock"></i><input type="password" id="pw" class="grow" required autocomplete="current-password" autofocus>

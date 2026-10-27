@@ -406,7 +406,7 @@
     });
     const csv = '﻿' + lines.map((l) => l.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-    a.download = `cv-${S.fy === 'all' ? 'all' : 'FY' + S.fy}-${lv}.csv`; a.click(); URL.revokeObjectURL(a.href);
+    a.download = `cv-${S.month || (S.fy === 'all' ? 'all' : 'FY' + S.fy)}${S.group ? '-' + S.group : ''}-${lv}.csv`; a.click(); URL.revokeObjectURL(a.href);
     toast('ดาวน์โหลด CSV แล้ว', 'success');
   }
 
@@ -450,6 +450,7 @@
     p.set('fy', S.fy); p.set('lv', S.level); if (S.group) p.set('g', S.group); if (S.month) p.set('m', S.month);
     if (S.selected.length) p.set('w', S.selected.join(','));
     if (S.cmp) p.set('cmp', '1');
+    if (/[?&]demo=1\b/.test(location.search)) p.set('demo', '1');
     history.replaceState(null, '', '?' + p.toString() + location.hash);
   }
   function fillMonths() {
@@ -486,7 +487,12 @@
     $('#btnShare').onclick = async () => { try { await navigator.clipboard.writeText(location.href); toast('คัดลอกลิงก์ (รวมตัวกรองที่เลือก) แล้ว', 'success'); } catch { toast('คัดลอกไม่สำเร็จ – คัดลอกจากแถบที่อยู่ได้เลย', 'warning'); } };
 
     let data;
-    try { data = await CV.loadData(); } catch (e) { setBanner('โหลดข้อมูลไม่สำเร็จ: ' + esc(e.message)); return; }
+    try { data = await CV.loadData(); } catch (e) {
+      setBanner(`โหลดข้อมูลจาก Google Sheet ไม่สำเร็จ: ${esc(e.message)} <button class="btn btn-xs btn-primary ml-2" onclick="location.reload()">ลองใหม่</button><br><span class="opacity-70">หากเกิดซ้ำ ตรวจ Environment Variables ใน Vercel และการ Deploy Apps Script</span>`);
+      $('#heroText').textContent = 'ยังแสดงข้อมูลไม่ได้ – ระบบไม่แสดงข้อมูลเก่าแทนเพื่อป้องกันการเข้าใจผิด';
+      $('#kpis').innerHTML = ''; $('#insights').innerHTML = ''; $('#watchlist').innerHTML = '';
+      return;
+    }
     S.data = data; index();
     if (data.source === 'seed') setBanner(CV.cfg.API_BASE
       ? `เชื่อมต่อ Google Sheet ไม่สำเร็จ (${esc(data.error?.message || '')}) – กำลังแสดงข้อมูลสำรองจากไฟล์ Excel ปี 2568–2569`

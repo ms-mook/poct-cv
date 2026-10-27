@@ -39,6 +39,10 @@
         if (!raw.ok) throw new Error(raw.error || 'API error');
       } catch (e) { error = e; raw = null; }
     }
+    // API configured but failing → do NOT silently show the old Excel snapshot (could be mistaken for current data).
+    // Demo/offline preview: open with ?demo=1 or leave API_BASE empty.
+    const demo = /[?&]demo=1\b/.test(location.search);
+    if (!raw && cfg.API_BASE && !demo) throw new Error((error && error.message) || 'เชื่อมต่อข้อมูลไม่สำเร็จ');
     if (!raw) {
       const res = await fetch('data/seed.json');
       raw = await res.json();
