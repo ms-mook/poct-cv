@@ -127,7 +127,7 @@
     try {
       const out = await CV.api('saveMonth', { password: S.pw, month: m, entries });
       toast(`บันทึกแล้ว: เพิ่มใหม่ ${out.added} · แก้ไข ${out.updated} (${monthLabel(m, true)})`);
-      S.data = await CV.loadData(); renderEntry(); renderWards();
+      S.data = await CV.loadData({ fresh: true }); renderEntry(); renderWards();
     } catch (err) { toast(err.message, true); }
     finally { btn.disabled = false; btn.textContent = '💾 บันทึกข้อมูลเดือนนี้'; }
   }
@@ -147,7 +147,7 @@
   async function saveWard(payload, okMsg) {
     try {
       await CV.api('upsertWard', { password: S.pw, ward: payload });
-      toast(okMsg); S.data = await CV.loadData(); renderWards(); renderEntry();
+      toast(okMsg); S.data = await CV.loadData({ fresh: true }); renderWards(); renderEntry();
       return true;
     } catch (err) { toast(err.message, true); return false; }
   }
@@ -161,13 +161,15 @@
 
   async function init() {
     try { S.data = await CV.loadData(); } catch (e) { $('#banner').hidden = false; $('#bannerText').textContent = 'โหลดข้อมูลไม่สำเร็จ: ' + e.message; return; }
-    if (!CV.cfg.API_URL) {
-      $('#banner').hidden = false; $('#bannerText').textContent = 'ยังไม่ได้ตั้งค่า API_URL ใน config.js – เข้าสู่ระบบและบันทึกข้อมูลไม่ได้ (ดูขั้นตอนใน README.md)';
+    if (!CV.cfg.API_BASE) {
+      $('#banner').hidden = false; $('#bannerText').textContent = 'ยังไม่ได้ตั้งค่า API_BASE ใน config.js – เข้าสู่ระบบและบันทึกข้อมูลไม่ได้ (ดูขั้นตอนใน README.md)';
       $('#loginBtn').disabled = true;
+    } else if (S.data.source === 'seed') {
+      $('#banner').hidden = false; $('#bannerText').textContent = 'อ่านข้อมูลจาก Google Sheet ไม่สำเร็จ: ' + (S.data.error?.message || '') + ' – ตรวจ Environment Variables ใน Vercel และการ Deploy Apps Script (ดู README.md)';
     }
     $('#loginForm').onsubmit = async (e) => {
       e.preventDefault(); const b = $('#loginBtn'); b.disabled = true; $('#loginErr').textContent = '';
-      try { await login($('#pw').value); } catch (err) { $('#loginErr').textContent = err.message; } finally { b.disabled = !CV.cfg.API_URL; }
+      try { await login($('#pw').value); } catch (err) { $('#loginErr').textContent = err.message; } finally { b.disabled = !CV.cfg.API_BASE; }
     };
     $('#btnLogout').onclick = logout;
     $('#tabEntry').onclick = () => tab('entry'); $('#tabWards').onclick = () => tab('wards');
@@ -188,7 +190,7 @@
       saveWard({ ward: tr.querySelector('.wn').value, device: dev, oldDevice: old, active: tr.querySelector('.wa').checked }, 'บันทึกแล้ว');
     });
     const saved = getPw();
-    if (saved && CV.cfg.API_URL) { try { await login(saved); } catch { setPw(null); } }
+    if (saved && CV.cfg.API_BASE) { try { await login(saved); } catch { setPw(null); } }
   }
   init();
 })();

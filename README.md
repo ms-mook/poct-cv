@@ -4,7 +4,7 @@
 เกณฑ์ผ่าน: **%CV < 6.7** (แก้ได้ที่ชีต `Config` → `cv_threshold`)
 
 ```
-Google Sheet (ฐานข้อมูล)  ←→  Apps Script Web app (API + รหัสผ่าน admin)  ←→  เว็บ static บน Vercel
+Google Sheet (ฐานข้อมูล) ←→ Apps Script (ตัวอ่าน/เขียนชีต) ←→ Vercel Functions /api (เก็บรหัสผ่าน) ←→ เว็บ static (Dashboard / Admin)
 ```
 
 | ไฟล์ | หน้าที่ |
@@ -12,7 +12,8 @@ Google Sheet (ฐานข้อมูล)  ←→  Apps Script Web app (API + �
 | `index.html` + `js/dashboard.js` | Dashboard: (1) แท่งร้อยละที่ผ่านต่อเดือน (2) กราฟเส้น %CV รายหอ (3) ตารางรายละเอียด + กดดูรายหอ, ตัวกรอง L1 / L2 / รวม |
 | `admin.html` + `js/admin.js` | หน้า admin: ฟอร์มบันทึก/แก้ไข %CV รายเดือน (วางจาก Excel ได้), เพิ่ม/แก้ไขหอและเครื่อง |
 | `apps-script/Code.gs` | Backend ที่ผูกกับ Google Sheet |
-| `config.js` | ใส่ URL ของ Apps Script (`API_URL`) |
+| `api/data.js`, `api/admin.js` | Vercel Functions: อ่านข้อมูล และรับคำสั่งบันทึก (ตรวจ `ADMIN_PASSWORD` ที่นี่) |
+| `config.js` | ตั้งค่าฝั่งเว็บ (`API_BASE: "/api"`) – ไม่มีความลับ |
 | `data/seed.json` | ข้อมูลสำรอง (Excel ปี 2568–2569) ใช้แสดงผลเมื่อยังไม่ได้ตั้งค่า API |
 | `tools/convert.py` | สคริปต์แปลง Excel รายปี → ข้อมูลแบบ long (ใช้ซ้ำได้) |
 
@@ -24,32 +25,28 @@ Google Sheet (ฐานข้อมูล)  ←→  Apps Script Web app (API + �
 - `Wards` – `no`, `ward`, `device`, `active`
 - `Config` – `cv_threshold = 6.7`
 
-### 2) Apps Script (backend)
-1. เปิดชีต → เมนู **ส่วนขยาย > Apps Script**
-2. ลบโค้ดเดิม แล้ววางเนื้อหาไฟล์ `apps-script/Code.gs` → บันทึก
-3. เลือกฟังก์ชัน `setup` → **Run** → อนุญาตสิทธิ์ (ครั้งแรก)
-4. **Project Settings (⚙) > Script properties > Add**: `ADMIN_PASSWORD` = รหัสผ่านที่ต้องการ
-5. **Deploy > New deployment > Web app**
-   - Execute as: **Me**
-   - Who has access: **Anyone**
-   - กด Deploy แล้วคัดลอก URL ที่ลงท้ายด้วย `/exec`
+### 2) Apps Script (ตัวอ่าน/เขียนชีต)
+1. เปิดชีต → เมนู **ส่วนขยาย > Apps Script** วางโค้ดจาก `apps-script/Code.gs` (ทับของเดิมทั้งหมด) → บันทึก
+2. เลือกฟังก์ชัน `setup` → **Run** (อนุญาตสิทธิ์ครั้งแรก)
+3. **Project Settings (⚙) > Script properties > Add**: `API_KEY` = สตริงสุ่มยาวๆ (สร้างเอง เช่น 32 ตัวอักษร) *ไม่ใช่รหัสผ่านแอดมิน*
+4. **Deploy > Manage deployments > ✏ Edit > Version: New version > Deploy** (หรือ New deployment ถ้ายังไม่เคย) — Execute as: **Me**, Who has access: **Anyone** แล้วคัดลอก URL `/exec`
 
-> แก้โค้ด Code.gs ภายหลัง ต้อง **Deploy > Manage deployments > Edit > New version** ด้วย URL จึงจะใช้โค้ดใหม่
+> ทุกครั้งที่แก้ Code.gs ต้อง Deploy เป็น **New version** URL เดิมจึงจะใช้โค้ดใหม่
 
-### 3) ตั้งค่าเว็บ
-แก้ `config.js`
-```js
-window.APP_CONFIG = { API_URL: "https://script.google.com/macros/s/xxxxxxxx/exec", THRESHOLD_DEFAULT: 6.7 };
-```
+### 3) Vercel Environment Variables
+Vercel → Project → **Settings > Environment Variables** (เลือก Production และ Preview) เพิ่ม 3 ตัว:
 
-### 4) GitHub + Vercel
-```bash
-git init && git add . && git commit -m "POCT CV dashboard"
-git remote add origin https://github.com/<user>/<repo>.git && git push -u origin main
-```
-Vercel → **Add New > Project** → เลือก repo → Framework Preset: **Other**, ไม่ต้องมี Build command / Output directory → Deploy
+| Name | ค่า |
+|---|---|
+| `ADMIN_PASSWORD` | รหัสผ่านเข้าหน้า admin |
+| `APPS_SCRIPT_URL` | URL `/exec` ของ Apps Script |
+| `APPS_SCRIPT_KEY` | ค่าเดียวกับ `API_KEY` ใน Script properties |
+
+จากนั้น **Deployments > ⋯ > Redeploy** เพื่อให้ค่าใหม่มีผล
 - Dashboard: `https://<project>.vercel.app/`
 - Admin: `https://<project>.vercel.app/admin`
+
+เหตุผลที่ต้องมี `API_KEY`: URL ของ Apps Script เปิดแบบ Anyone จึงต้องมีคีย์ลับที่รู้กันเฉพาะ Vercel กับ Apps Script ไม่ให้คนนอกเรียกอ่าน/เขียนชีตตรงๆ ได้ ส่วนรหัสผ่านแอดมินอยู่ที่ Vercel ที่เดียว
 
 ## วิธีใช้งานประจำเดือน
 1. เข้า `/admin` ใส่รหัสผ่าน
@@ -72,6 +69,7 @@ Vercel → **Add New > Project** → เลือก repo → Framework Preset: 
 - เซลล์ "ปิดปรับปรุงหอผู้ป่วย" เก็บเป็นค่าว่าง + หมายเหตุ
 
 ## ความปลอดภัย
-- รหัสผ่านแอดมินเก็บใน Script properties เท่านั้น (ไม่อยู่ในโค้ดเว็บ/ชีต) และตรวจที่ฝั่ง Apps Script ทุกครั้งที่บันทึก
-- การอ่านข้อมูล dashboard เปิดสาธารณะผ่าน URL `/exec` (ใครมีลิงก์อ่านได้) – ข้อมูลเป็นค่า QC รายหอ ไม่มีข้อมูลผู้ป่วย
-- ถ้าต้องจำกัดผู้เข้าชม ให้เปิด Vercel Authentication / Password Protection ที่ตัวโปรเจกต์
+- `ADMIN_PASSWORD`, `APPS_SCRIPT_URL`, `APPS_SCRIPT_KEY` อยู่ใน Vercel Environment Variables เท่านั้น ไม่อยู่ในโค้ด/GitHub/ชีต; เบราว์เซอร์ไม่เห็น URL หรือคีย์ของ Apps Script
+- Apps Script ปฏิเสธทุกคำขอที่ไม่มี `API_KEY` ที่ถูกต้อง (ทั้งอ่านและเขียน) · `/api/admin` ตรวจรหัสผ่านแบบ timing-safe และหน่วง 0.8 วินาทีเมื่อรหัสผิด
+- Dashboard เปิดอ่านได้สำหรับทุกคนที่มีลิงก์เว็บ (ข้อมูลเป็นค่า QC รายหอ ไม่มีข้อมูลผู้ป่วย) ถ้าต้องจำกัด ให้เปิด Vercel Authentication / Password Protection ที่ตัวโปรเจกต์
+- รัน/ดูตัวอย่างในเครื่อง: เปิดไฟล์โดยตั้ง `API_BASE: ""` จะแสดงข้อมูลสำรองจาก `data/seed.json` (บันทึกข้อมูลไม่ได้)

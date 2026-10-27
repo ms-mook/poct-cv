@@ -30,11 +30,11 @@
     return vals.length ? vals.every((v) => v < thr) : null;
   }
 
-  async function loadData() {
+  async function loadData(opts) {
     let raw, source = 'api', error = null;
-    if (cfg.API_URL) {
+    if (cfg.API_BASE) {
       try {
-        const res = await fetch(cfg.API_URL + (cfg.API_URL.includes('?') ? '&' : '?') + 'action=data', { redirect: 'follow' });
+        const res = await fetch(cfg.API_BASE + '/data' + (opts && opts.fresh ? '?t=' + Date.now() : ''));
         raw = await res.json();
         if (!raw.ok) throw new Error(raw.error || 'API error');
       } catch (e) { error = e; raw = null; }
@@ -54,13 +54,13 @@
   }
 
   async function api(action, payload) {
-    if (!cfg.API_URL) throw new Error('ยังไม่ได้ตั้งค่า API_URL ใน config.js');
-    const res = await fetch(cfg.API_URL, {
-      method: 'POST', redirect: 'follow',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // simple request → no CORS preflight
+    if (!cfg.API_BASE) throw new Error('ยังไม่ได้ตั้งค่า API_BASE ใน config.js');
+    const res = await fetch(cfg.API_BASE + '/admin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action, ...payload })
     });
-    const out = await res.json();
+    let out;
+    try { out = await res.json(); } catch { throw new Error('เซิร์ฟเวอร์ไม่ตอบกลับ (HTTP ' + res.status + ')'); }
     if (!out.ok) throw new Error(out.error || 'เกิดข้อผิดพลาด');
     return out;
   }

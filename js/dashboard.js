@@ -272,9 +272,9 @@
     let data;
     try { data = await CV.loadData(); } catch (e) { setBanner('โหลดข้อมูลไม่สำเร็จ: ' + esc(e.message), true); return; }
     S.data = data; index();
-    if (data.source === 'seed') setBanner(CV.cfg.API_URL
-      ? `เชื่อมต่อ Google Sheet ไม่สำเร็จ (${esc(data.error?.message || '')}) – กำลังแสดงข้อมูลสำรอง ณ วันที่ติดตั้ง`
-      : 'ยังไม่ได้เชื่อมต่อ Google Sheet – กำลังแสดงข้อมูลสำรองจากไฟล์ Excel ปี 2568–2569 (ตั้งค่า API_URL ใน config.js)', !!CV.cfg.API_URL);
+    if (data.source === 'seed') setBanner(CV.cfg.API_BASE
+      ? `เชื่อมต่อ Google Sheet ไม่สำเร็จ (${esc(data.error?.message || '')}) – กำลังแสดงข้อมูลสำรองจากไฟล์ Excel ปี 2568–2569`
+      : 'โหมดตัวอย่าง – กำลังแสดงข้อมูลสำรองจากไฟล์ Excel ปี 2568–2569 (API_BASE ใน config.js เว้นว่างไว้)', !!CV.cfg.API_BASE);
 
     const fys = [...new Set(data.rows.map((r) => r.fy))].sort((a, b) => b - a);
     $('#fySel').innerHTML = fys.map((f) => `<option value="${f}">ปีงบประมาณ ${f}</option>`).join('') + '<option value="all">ทุกปี (รวม)</option>';

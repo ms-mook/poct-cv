@@ -6,13 +6,13 @@
  *   Wards  : no | ward | device | active
  *   Config : key | value | description        (cv_threshold = 6.7)
  *
- * Endpoints (deploy as Web app: Execute as "Me", access "Anyone")
- *   GET  ?action=data                       -> public read-only JSON for the dashboard
- *   POST {action:'login', password}         -> {ok:true}
- *   POST {action:'saveMonth', password, month, entries:[{device,l1,l2,note}]}
- *   POST {action:'upsertWard', password, ward:{device, ward, active, oldDevice?, isNew?}}
+ * Endpoints (deploy as Web app: Execute as "Me", access "Anyone") – called ONLY by the Vercel functions /api/*
+ *   GET  ?action=data&key=API_KEY
+ *   POST {key, action:'saveMonth', month, entries:[{device,l1,l2,note}]}
+ *   POST {key, action:'upsertWard', ward:{device, ward, active, oldDevice?, isNew?}}
  *
- * The admin password is stored in Script properties (ADMIN_PASSWORD) – never in the sheet or the web code.
+ * Auth: every call must carry `key` = Script property API_KEY (same value as Vercel env APPS_SCRIPT_KEY).
+ * The admin password (ADMIN_PASSWORD) lives only in Vercel Environment Variables and is checked by /api/admin.
  */
 
 var SHEET_DATA = 'Data';
@@ -31,8 +31,8 @@ function setup() {
   d.getRange('C:D').setNumberFormat('0.00');
   d.setFrozenRows(1);
   ss.getSheetByName(SHEET_WARDS).getRange('B:C').setNumberFormat('@');
-  if (!PropertiesService.getScriptProperties().getProperty('ADMIN_PASSWORD')) {
-    Logger.log('ยังไม่ได้ตั้ง ADMIN_PASSWORD: Project Settings > Script properties > Add');
+  if (!PropertiesService.getScriptProperties().getProperty('API_KEY')) {
+    Logger.log('ยังไม่ได้ตั้ง API_KEY: Project Settings > Script properties > Add (ค่าเดียวกับ APPS_SCRIPT_KEY ใน Vercel)');
   }
 }
 
@@ -40,6 +40,7 @@ function setup() {
 
 function doGet(e) {
   try {
+    checkKey_(e && e.parameter && e.parameter.key);
     var action = (e && e.parameter && e.parameter.action) || 'data';
     if (action === 'data') return json_(readAll_());
     return json_({ ok: false, error: 'unknown action' });
@@ -51,8 +52,7 @@ function doGet(e) {
 function doPost(e) {
   try {
     var body = JSON.parse(e.postData.contents);
-    checkPassword_(body.password);
-    if (body.action === 'login') return json_({ ok: true });
+    checkKey_(body.key);
 
     var lock = LockService.getScriptLock();
     lock.waitLock(20000);
@@ -72,13 +72,10 @@ function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
-function checkPassword_(pw) {
-  var real = PropertiesService.getScriptProperties().getProperty('ADMIN_PASSWORD');
-  if (!real) throw new Error('ยังไม่ได้ตั้งรหัสผ่านแอดมิน (Script properties: ADMIN_PASSWORD)');
-  if (typeof pw !== 'string' || pw !== real) {
-    Utilities.sleep(800);                       // slow down guessing
-    throw new Error('รหัสผ่านไม่ถูกต้อง');
-  }
+function checkKey_(key) {
+  var real = PropertiesService.getScriptProperties().getProperty('API_KEY');
+  if (!real) throw new Error('ยังไม่ได้ตั้งค่า API_KEY ใน Script properties');
+  if (typeof key !== 'string' || key !== real) throw new Error('unauthorized');
 }
 
 /* ------------------------------------------------------------------ read */
