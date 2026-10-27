@@ -5,7 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <title>Admin | บันทึก %CV POCT Glucose</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b6b5b'/%3E%3Cpath d='M16 6c4 5 7 8.4 7 12a7 7 0 0 1-14 0c0-3.600 3-7 7-12z' fill='white'/%3E%3C/svg%3E">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="img/favicon-32.png">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b6b5b">
 <link rel="preload" href="fonts/sarabun-thai-500-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="css/fonts.css">
 <link rel="stylesheet" href="css/tw.css">
@@ -17,7 +21,7 @@
 
 <header class="sticky top-0 z-40 px-3 lg:px-6 pt-3">
   <div class="glass mx-auto flex max-w-none items-center gap-3 px-3 lg:px-6 py-2">
-    <span class="logo-mark grid h-10 w-10 flex-none place-items-center rounded-xl"><i data-i="user-round-cog" data-c="icon-lg"></i></span>
+    <img src="img/icon-192.png" alt="POCT %CV" width="40" height="40" class="h-10 w-10 flex-none rounded-xl bg-white object-contain p-0.5 shadow">
     <span class="min-w-0 leading-tight"><span class="block truncate text-base font-extrabold">จัดการข้อมูล %CV</span><span class="hidden truncate text-xs opacity-70 sm:block">หน้าสำหรับผู้ดูแลระบบ · POCT Glucose · รพ.ศรีนครินทร์</span></span>
     <div class="ml-auto flex items-center gap-1">
       <button class="btn btn-ghost btn-sm btn-square" id="btnTheme" type="button" aria-label="สลับโหมดมืด/สว่าง"><i data-i="moon" data-c="icon-lg"></i></button>
@@ -32,7 +36,7 @@
   <!-- login -->
   <section class="mx-auto mt-6 max-w-md" id="loginView">
     <form class="glass pop grid gap-4 p-6" id="loginForm" autocomplete="off">
-      <div class="flex items-center gap-3"><span class="logo-mark grid h-12 w-12 place-items-center rounded-2xl"><i data-i="lock" data-c="icon-lg"></i></span>
+      <div class="flex items-center gap-3"><img src="img/icon-192.png" alt="" width="48" height="48" class="h-12 w-12 rounded-2xl bg-white object-contain p-0.5 shadow">
         <div><h1 class="text-xl font-extrabold">เข้าสู่ระบบผู้ดูแล</h1><p class="text-sm opacity-70">รหัสผ่านตั้งไว้ใน Vercel (ADMIN_PASSWORD)</p></div></div>
       <label class="form-control"><span class="label-text mb-1 font-semibold">รหัสผ่าน</span>
         <span class="input input-bordered flex items-center gap-2 bg-transparent"><i data-i="lock"></i><input type="password" id="pw" class="grow" required autocomplete="current-password" autofocus>
