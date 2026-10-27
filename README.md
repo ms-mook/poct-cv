@@ -28,7 +28,7 @@ Google Sheet (ฐานข้อมูล) ←→ Apps Script (ตัวอ่�
 ### 2) Apps Script (ตัวอ่าน/เขียนชีต)
 1. เปิดชีต → เมนู **ส่วนขยาย > Apps Script** วางโค้ดจาก `apps-script/Code.gs` (ทับของเดิมทั้งหมด) → บันทึก
 2. เลือกฟังก์ชัน `setup` → **Run** (อนุญาตสิทธิ์ครั้งแรก)
-3. **Project Settings (⚙) > Script properties > Add**: `API_KEY` = สตริงสุ่มยาวๆ (สร้างเอง เช่น 32 ตัวอักษร) *ไม่ใช่รหัสผ่านแอดมิน*
+3. เลือกฟังก์ชัน `createApiKey` → **Run** → คัดลอกค่าที่ขึ้นใน "บันทึกการดำเนินการ" (คือ `API_KEY` ที่ถูกสร้างใน Script properties แล้ว; จะตั้งเองที่ Project Settings > Script properties ก็ได้)
 4. **Deploy > Manage deployments > ✏ Edit > Version: New version > Deploy** (หรือ New deployment ถ้ายังไม่เคย) — Execute as: **Me**, Who has access: **Anyone** แล้วคัดลอก URL `/exec`
 
 > ทุกครั้งที่แก้ Code.gs ต้อง Deploy เป็น **New version** URL เดิมจึงจะใช้โค้ดใหม่

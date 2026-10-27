@@ -32,8 +32,25 @@ function setup() {
   d.setFrozenRows(1);
   ss.getSheetByName(SHEET_WARDS).getRange('B:C').setNumberFormat('@');
   if (!PropertiesService.getScriptProperties().getProperty('API_KEY')) {
-    Logger.log('ยังไม่ได้ตั้ง API_KEY: Project Settings > Script properties > Add (ค่าเดียวกับ APPS_SCRIPT_KEY ใน Vercel)');
+    Logger.log('ยังไม่ได้ตั้ง API_KEY: รันฟังก์ชัน createApiKey (หรือ Project Settings > Script properties > Add)');
   }
+}
+
+/**
+ * Run once: creates a random API_KEY in Script properties (if none exists) and prints it in the execution log.
+ * Copy the printed value into Vercel as APPS_SCRIPT_KEY. Running again prints the existing key (does not change it).
+ */
+function createApiKey() {
+  var props = PropertiesService.getScriptProperties();
+  var k = props.getProperty('API_KEY');
+  if (!k) {
+    k = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
+    props.setProperty('API_KEY', k);
+    Logger.log('สร้าง API_KEY ใหม่แล้ว – คัดลอกค่าด้านล่างไปใส่ Vercel เป็น APPS_SCRIPT_KEY');
+  } else {
+    Logger.log('มี API_KEY อยู่แล้ว – ค่าปัจจุบัน (ใส่ Vercel เป็น APPS_SCRIPT_KEY):');
+  }
+  Logger.log(k);
 }
 
 /* ------------------------------------------------------------------ routing */
