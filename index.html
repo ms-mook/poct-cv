@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ติดตาม %CV POCT Glucose | รพ.ศรีนครินทร์</title>
+<meta name="description" content="แดชบอร์ดติดตามค่า %CV การควบคุมคุณภาพ (IQC L1/L2) เครื่อง ACCU-Chek Inform II แยกตามหอผู้ป่วย โรงพยาบาลศรีนครินทร์">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b6b5b'/%3E%3Cpath d='M16 6c4 5 7 8.4 7 12a7 7 0 0 1-14 0c0-3.600 3-7 7-12z' fill='white'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c3.300 4.200 6 7 6 10.200A6 6 0 0 1 6 12.200C6 9 8.700 6.200 12 2z"/></svg>
+      </div>
+      <div>
+        <h1>ติดตามค่า %CV การควบคุมคุณภาพ POCT Glucose</h1>
+        <p>เครื่อง ACCU-Chek Inform II · โรงพยาบาลศรีนครินทร์</p>
+      </div>
+    </div>
+    <nav class="nav"><a class="btn" href="admin.html">⚙ จัดการข้อมูล (Admin)</a></nav>
+  </div>
+</header>
+<div id="banner" class="banner" hidden><div class="wrap" id="bannerText"></div></div>
+
+<div class="filters" role="region" aria-label="ตัวกรอง">
+  <div class="wrap">
+    <div class="field"><label for="fySel">ปีงบประมาณ</label>
+      <select id="fySel"></select></div>
+    <div class="field"><span class="lbl" id="lvlLbl">ระดับ QC</span>
+      <div class="seg" role="group" aria-labelledby="lvlLbl" id="lvlSeg">
+        <button type="button" data-level="L1" aria-pressed="false"><span class="dot" style="background:var(--l1)"></span>L1</button>
+        <button type="button" data-level="L2" aria-pressed="false"><span class="dot" style="background:var(--l2)"></span>L2</button>
+        <button type="button" data-level="ALL" aria-pressed="true"><span class="dot" style="background:var(--all)"></span>รวม L1+L2</button>
+      </div></div>
+    <div class="thr-note" id="thrNote">เกณฑ์ผ่าน: %CV &lt; <b>6.7</b>%</div>
+  </div>
+</div>
+
+<main class="wrap" id="app">
+  <section class="kpis" id="kpis" aria-label="สรุปภาพรวม"></section>
+
+  <section class="card" aria-labelledby="h1">
+    <header>
+      <div><h2 id="h1"><span class="num-badge">1</span>ร้อยละของเครื่องที่ผ่านเกณฑ์ %CV แยกตามเดือน</h2>
+        <p class="sub" id="sub1"></p></div>
+    </header>
+    <div class="chart-box"><canvas id="barChart" role="img" aria-label="แผนภูมิแท่งร้อยละที่ผ่านเกณฑ์ %CV รายเดือน"></canvas></div>
+    <details class="tbl-toggle"><summary>ดูเป็นตาราง</summary>
+      <div class="tbl-scroll" style="margin-top:8px"><table id="barTable"></table></div></details>
+  </section>
+
+  <section class="card" aria-labelledby="h2">
+    <header>
+      <div><h2 id="h2"><span class="num-badge">2</span>แนวโน้ม %CV รายเดือน แยกตามหอผู้ป่วย</h2>
+        <p class="sub" id="sub2">เลือกหอผู้ป่วยได้สูงสุด 8 หอ เพื่อเปรียบเทียบ</p></div>
+    </header>
+    <div class="picker">
+      <div class="picker-side">
+        <input type="search" id="wardSearch" placeholder="ค้นหาหอผู้ป่วย / หมายเลขเครื่อง" aria-label="ค้นหาหอผู้ป่วย">
+        <div class="picker-actions">
+          <button class="btn small" type="button" id="btnTopFail">หอที่ไม่ผ่านบ่อยสุด</button>
+          <button class="btn small" type="button" id="btnClear">ล้าง</button>
+        </div>
+        <label class="check"><input type="checkbox" id="chkMean" checked> แสดงค่าเฉลี่ยทุกหอ</label>
+        <div class="picker-list" id="wardList" role="group" aria-label="เลือกหอผู้ป่วย"></div>
+        <div class="hint" id="pickHint"></div>
+      </div>
+      <div>
+        <div class="chart-box tall"><canvas id="lineChart" role="img" aria-label="กราฟเส้น %CV รายเดือนแยกตามหอผู้ป่วย"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="h3">
+    <header>
+      <div><h2 id="h3"><span class="num-badge">3</span>รายละเอียด %CV แต่ละหอผู้ป่วย</h2>
+        <p class="sub">กดที่แถวของหอผู้ป่วยเพื่อดูรายละเอียดรายเดือน (L1 และ L2)</p></div>
+      <button class="btn small" type="button" id="btnCsv">⬇ ดาวน์โหลด CSV</button>
+    </header>
+    <div class="form-row" style="margin-bottom:12px">
+      <div class="field" style="flex-direction:row"><input type="search" id="tblSearch" placeholder="ค้นหาหอผู้ป่วย / เครื่อง" aria-label="ค้นหาในตาราง" style="min-width:240px"></div>
+      <label class="check"><input type="checkbox" id="onlyFail"> แสดงเฉพาะหอที่เคยไม่ผ่าน</label>
+      <div class="field" style="flex-direction:row"><label for="sortSel">เรียงตาม</label>
+        <select id="sortSel"><option value="no">ลำดับ</option><option value="fails">จำนวนครั้งที่ไม่ผ่าน (มาก→น้อย)</option><option value="max">%CV สูงสุด (มาก→น้อย)</option></select></div>
+    </div>
+    <div class="tbl-scroll"><table class="tbl-matrix" id="matrix"></table></div>
+    <div class="legend-note"><span><span class="fail fail-mark">12.34</span> = %CV ≥ เกณฑ์ (ไม่ผ่าน)</span><span>– = ไม่มีข้อมูล / ปิดปรับปรุง</span></div>
+  </section>
+  <footer id="foot"></footer>
+</main>
+
+<dialog id="detail" aria-labelledby="dTitle">
+  <div class="dlg-head">
+    <div><h3 id="dTitle"></h3><div class="sub" id="dSub" style="color:var(--ink-2);font-size:13px"></div></div>
+    <button class="x" id="dClose" aria-label="ปิด">✕</button>
+  </div>
+  <div class="dlg-body">
+    <div class="chart-box" style="height:280px"><canvas id="detailChart" role="img" aria-label="กราฟ %CV L1 และ L2 รายเดือนของหอผู้ป่วย"></canvas></div>
+    <div class="tbl-scroll" style="max-height:300px"><table id="detailTable"></table></div>
+  </div>
+</dialog>
+
+<script src="vendor/chart.umd.js"></script>
+<script src="config.js"></script>
+<script src="js/common.js"></script>
+<script src="js/dashboard.js"></script>
+</body>
+</html>
