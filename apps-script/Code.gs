@@ -167,18 +167,18 @@ function saveMonth_(body) {
   values.forEach(function (r, i) { index[monthText_(r[0]) + '|' + String(r[1]).trim()] = i; });
 
   var now = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd HH:mm');
-  var appended = [], updated = 0, logs = [];
+  var appended = [], updated = 0, logs = [], user = String(body.user || '').slice(0, 60);
   var show = function (a, b, n) { return (a === '' || a === null ? '–' : a) + ' / ' + (b === '' || b === null ? '–' : b) + (n ? ' [' + n + ']' : ''); };
   clean.forEach(function (c) {
     var rec = [month, c.device, c.l1 === null ? '' : c.l1, c.l2 === null ? '' : c.l2, c.note, now];
     var key = month + '|' + c.device;
     if (key in index) {
       var o = values[index[key]];
-      logs.push([now, 'แก้ไข', month, c.device, show(o[2], o[3], o[4]), show(rec[2], rec[3], rec[4])]);
+      logs.push([now, 'แก้ไข', month, c.device, show(o[2], o[3], o[4]), show(rec[2], rec[3], rec[4]), user]);
       values[index[key]] = rec; updated++;
-    } else { appended.push(rec); logs.push([now, 'เพิ่ม', month, c.device, '', show(rec[2], rec[3], rec[4])]); }
+    } else { appended.push(rec); logs.push([now, 'เพิ่ม', month, c.device, '', show(rec[2], rec[3], rec[4]), user]); }
   });
-  if (logs.length) { var lg = ensureLog_(); lg.getRange(lg.getLastRow() + 1, 1, logs.length, 6).setValues(logs); }
+  if (logs.length) { var lg = ensureLog_(); lg.getRange(lg.getLastRow() + 1, 1, logs.length, 7).setValues(logs); }
   if (updated) sh.getRange(2, 1, values.length, 6).setValues(values);
   if (appended.length) sh.getRange(last + 1, 1, appended.length, 6).setValues(appended);
   SpreadsheetApp.flush();
@@ -200,13 +200,16 @@ function upsertWard_(body) {
   }
   var active = !(w.active === false);
   if (w.isNew && rowIdx >= 0) throw new Error('หมายเลขเครื่องนี้มีอยู่แล้ว');
+  var wlog = function (act, before) { ensureLog_().appendRow([Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd HH:mm'), act, '', device, before, ward + (active ? '' : ' [ปิดใช้งาน]') + (w.group ? ' {' + w.group + '}' : ''), String(body.user || '')]); };
   if (rowIdx >= 0) {
+    wlog('แก้ไขหอ/เครื่อง', String(vals[rowIdx][1]) + ' · ' + oldDevice);
     sh.getRange(rowIdx + 1, 2, 1, 3).setValues([[ward, device, active]]);
     sh.getRange(rowIdx + 1, 5).setValue(String(w.group || '').trim());
     if (oldDevice !== device) renameDevice_(oldDevice, device);
     return { ok: true, mode: 'updated' };
   }
   sh.appendRow([maxNo + 1, ward, device, active, String(w.group || '').trim()]);
+  wlog('เพิ่มหอ/เครื่อง', '');
   return { ok: true, mode: 'added' };
 }
 
@@ -223,13 +226,14 @@ function renameDevice_(from, to) {
 
 function ensureLog_() {
   var ss = SpreadsheetApp.getActive(), sh = ss.getSheetByName(SHEET_LOG);
-  if (!sh) { sh = ss.insertSheet(SHEET_LOG); sh.appendRow(['time', 'action', 'month', 'device', 'before (L1 / L2 [note])', 'after (L1 / L2 [note])']); sh.setFrozenRows(1); sh.getRange('A:F').setNumberFormat('@'); }
+  if (!sh) { sh = ss.insertSheet(SHEET_LOG); sh.appendRow(['time', 'action', 'month', 'device', 'before (L1 / L2 [note])', 'after (L1 / L2 [note])', 'user']); sh.setFrozenRows(1); sh.getRange('A:G').setNumberFormat('@'); }
+  if (String(sh.getRange('G1').getValue()) !== 'user') sh.getRange('G1').setValue('user');
   return sh;
 }
 /** latest 300 changes, newest first */
 function history_() {
   var sh = ensureLog_(), last = sh.getLastRow();
   if (last < 2) return { ok: true, items: [] };
-  var n = Math.min(300, last - 1), v = sh.getRange(last - n + 1, 1, n, 6).getValues().reverse();
-  return { ok: true, items: v.map(function (r) { return { time: String(r[0]), action: String(r[1]), month: String(r[2]), device: String(r[3]), before: String(r[4]), after: String(r[5]) }; }) };
+  var n = Math.min(300, last - 1), v = sh.getRange(last - n + 1, 1, n, 7).getValues().reverse();
+  return { ok: true, items: v.map(function (r) { return { time: String(r[0]), action: String(r[1]), month: String(r[2]), device: String(r[3]), before: String(r[4]), after: String(r[5]), user: String(r[6] || '') }; }) };
 }

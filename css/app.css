@@ -199,3 +199,62 @@ details > summary::-webkit-details-marker { display: none; }
 /* wide screens: charts grow with the viewport */
 .chart-box { height: clamp(340px, 40vh, 560px); }
 .chart-box.tall { height: clamp(410px, 52vh, 700px); }
+
+/* ---------- 4. analysis ---------- */
+.mover { display: flex; align-items: center; gap: .5rem; padding: .35rem .55rem; border-radius: .6rem; background: var(--nd-bg); font-size: .85rem; cursor: pointer; border: 0; text-align: left; width: 100%; color: inherit; }
+.mover:hover { outline: 1px solid var(--line); }
+.mover .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.mover .dv { font-weight: 800; font-variant-numeric: tabular-nums; }
+.vbar { height: .45rem; border-radius: 99px; background: var(--line); overflow: hidden; width: 90px; flex: none; }
+.vbar i { display: block; height: 100%; background: var(--warn); border-radius: 99px; }
+.cal-table { font-size: .74rem !important; }
+.cal-table th, .cal-table td { padding: .25rem .3rem !important; text-align: center !important; }
+.cal-table td:first-child, .cal-table th:first-child { text-align: left !important; }
+.cal-dot { display: inline-block; width: .85rem; height: .85rem; border-radius: 3px; vertical-align: -.12em; }
+.cal-dot.ok { background: color-mix(in srgb, var(--ok) 70%, transparent); }
+.cal-dot.part { background: color-mix(in srgb, var(--warn) 75%, transparent); }
+.cal-dot.nd { background: repeating-linear-gradient(45deg, var(--muted) 0 2px, transparent 2px 4px); outline: 1px solid var(--muted); }
+.cal-dot.miss { background: transparent; outline: 1.5px solid var(--bad); }
+
+/* ---------- 5. one-page meeting summary ---------- */
+#onepage { position: fixed; inset: 0; z-index: 60; overflow: auto; background: color-mix(in srgb, var(--page-bg) 92%, transparent); padding: 0 1rem 2rem; }
+.op-bar { position: sticky; top: 0; display: flex; align-items: center; gap: .75rem; padding: .75rem 0; background: color-mix(in srgb, var(--page-bg) 96%, transparent); z-index: 1; }
+.op-page { width: min(277mm, 100%); margin: 0 auto; background: #fff; color: #111; border-radius: 10px; box-shadow: 0 10px 40px rgba(0,0,0,.18); padding: 9mm 10mm; font-size: 13px; line-height: 1.35; }
+.op-head { display: flex; gap: 12px; align-items: center; border-bottom: 2px solid #0b6b5b; padding-bottom: 6px; margin-bottom: 8px; }
+.op-head img { width: 54px; height: 54px; object-fit: contain; }
+.op-title { font-size: 19px; font-weight: 800; color: #0b6b5b; }
+.op-sub { font-size: 12.5px; color: #444; }
+.op-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 8px; }
+.op-kpi { border: 1px solid #d5ddd9; border-radius: 8px; padding: 6px 10px; }
+.op-kpi .k { font-size: 11.5px; color: #555; font-weight: 600; }
+.op-kpi .v { font-size: 26px; font-weight: 800; line-height: 1.1; }
+.op-kpi .d { font-size: 11px; color: #555; }
+.op-grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 10px; }
+.op-box { border: 1px solid #d5ddd9; border-radius: 8px; padding: 8px 10px; min-width: 0; }
+.op-h { font-weight: 800; font-size: 13px; margin-bottom: 4px; color: #0b6b5b; }
+.op-chart { position: relative; height: 230px; }
+.op-notes { margin: 0; padding-left: 1.1rem; font-size: 12px; }
+.op-notes li { margin: 1px 0; }
+.op-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.op-table th { background: #eef4f2; text-align: left; padding: 3px 5px; font-size: 11px; }
+  .op-table td:nth-child(3) { white-space: nowrap; }
+.op-table td { border-top: 1px solid #e3e8e6; padding: 3px 5px; vertical-align: top; }
+.op-table .tag { display: inline-block; padding: 0 6px; border-radius: 99px; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+.op-table .tag.bad { background: #fde1e0; color: #a11d19; } .op-table .tag.warn { background: #feefc7; color: #8a4f06; } .op-table .tag.info { background: #e8ecef; color: #333; }
+.op-foot { display: flex; justify-content: space-between; gap: 10px; margin-top: 10px; font-size: 11.5px; color: #444; flex-wrap: wrap; }
+@media (max-width: 760px) { .op-kpis { grid-template-columns: repeat(2, 1fr); } .op-grid { grid-template-columns: 1fr; } }
+@media print {
+  html.op-mode body > *:not(#onepage) { display: none !important; }
+  html.op-mode #onepage { position: static !important; display: block !important; padding: 0 !important; background: #fff !important; overflow: visible !important; }
+  html.op-mode .op-page { box-shadow: none !important; width: auto !important; padding: 0 !important; border-radius: 0 !important; }
+  html.op-mode .op-chart { height: 200px !important; }
+  canvas { max-width: 100% !important; }
+  html.op-mode .op-chart canvas { width: 100% !important; height: 100% !important; }
+  html.op-mode .op-table td { padding: 2px 5px !important; }
+  html.op-mode, html.op-mode body { height: auto !important; min-height: 0 !important; }
+  html.op-mode .op-page { max-height: 188mm; overflow: hidden; break-inside: avoid; }
+  #analysis { break-before: page; }
+  #analysis .xl\:grid-cols-2 { display: block !important; }
+  #analysis .xl\:grid-cols-2 > * { break-inside: avoid; margin-bottom: 6mm; }
+  #scatterChart { max-height: 300px; }
+}

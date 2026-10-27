@@ -5,10 +5,12 @@
   const $$ = (s) => [...document.querySelectorAll(s)];
   const KEY = 'poct_cv_admin_pw';
   const TH = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
-  const S = { data: null, pw: null, dirty: false, saving: false };
+  const S = { data: null, pw: null, user: '', dirty: false, saving: false };
 
-  const getPw = () => { try { return sessionStorage.getItem(KEY); } catch { return null; } };
-  const setPw = (v) => { try { v ? sessionStorage.setItem(KEY, v) : sessionStorage.removeItem(KEY); } catch { /* private mode */ } };
+  // session only (cleared when the tab closes): {u, p}
+  const getPw = () => { try { return JSON.parse(sessionStorage.getItem(KEY) || 'null'); } catch { return null; } };
+  const setPw = (v) => { try { v ? sessionStorage.setItem(KEY, JSON.stringify(v)) : sessionStorage.removeItem(KEY); } catch { /* private mode */ } };
+  const auth = () => ({ username: S.user, password: S.pw });
   const prevMonth = (m) => { let [y, mo] = m.split('-').map(Number); mo--; if (mo < 1) { mo = 12; y--; } return `${y}-${String(mo).padStart(2, '0')}`; };
 
   function toast(msg, err) {
@@ -21,9 +23,10 @@
   const setDirty = (v) => { S.dirty = v; };
 
   /* ------------------------------------------------------------ auth */
-  async function login(pw) {
-    await CV.api('login', { password: pw });
-    S.pw = pw; setPw(pw);
+  async function login(u, pw) {
+    const out = await CV.api('login', { username: u, password: pw });
+    S.user = out.user || u; S.pw = pw; setPw({ u: S.user, p: pw });
+    $('#whoami').innerHTML = `${icon('user-round-cog')} ${esc(S.user)}`; $('#whoami').hidden = false;
     $('#loginView').hidden = true; $('#adminView').hidden = false; $('#btnLogout').hidden = false;
     initEntry(); renderWards();
   }
@@ -190,7 +193,7 @@
     if (cleared && !confirm(`มี ${cleared} หอที่ล้างค่า %CV เดิมออก (ข้อมูลเดิมจะถูกลบ) ต้องการบันทึกต่อหรือไม่?\nหากไม่ได้ทำ QC ให้ติ๊ก ND แทน`)) return;
     S.saving = true; const btn = $('#btnSave'); btn.disabled = true; btn.querySelector('span').textContent = 'กำลังบันทึก…'; btn.firstElementChild.classList.add('spin-slow');
     try {
-      const out = await CV.api('saveMonth', { password: S.pw, month: m, entries });
+      const out = await CV.api('saveMonth', { ...auth(), month: m, entries });
       toast(`บันทึกแล้ว (${monthLabel(m, true)}): เพิ่มใหม่ ${out.added} · แก้ไข ${out.updated}`);
       S.data = await CV.loadData({ fresh: true }); renderEntry(); renderWards();
     } catch (err) { if (!handleAuthError(err)) toast(err.message, true); else setTimeout(() => location.reload(), 1200); }
@@ -213,7 +216,7 @@
   }
   async function saveWard(payload, okMsg) {
     try {
-      await CV.api('upsertWard', { password: S.pw, ward: payload });
+      await CV.api('upsertWard', { ...auth(), ward: payload });
       toast(okMsg); S.data = await CV.loadData({ fresh: true }); renderWards(); renderEntry();
       return true;
     } catch (err) { if (!handleAuthError(err)) toast(err.message, true); return false; }
@@ -222,11 +225,11 @@
   async function loadHistory() {
     const t = $('#histTable'); t.innerHTML = '<tbody><tr><td style="text-align:center" class="p-6">กำลังโหลด…</td></tr></tbody>';
     try {
-      const out = await CV.api('history', { password: S.pw });
+      const out = await CV.api('history', auth());
       const name = (d) => S.data.wards.find((w) => w.device === d)?.ward || d;
-      t.innerHTML = '<thead><tr><th style="text-align:left">เวลา</th><th style="text-align:left">การกระทำ</th><th style="text-align:left">เดือน</th><th style="text-align:left">หอผู้ป่วย</th><th style="text-align:left">ก่อน (L1 / L2)</th><th style="text-align:left">หลัง (L1 / L2)</th></tr></thead><tbody>'
-        + (out.items.length ? out.items.map((i) => `<tr><td style="text-align:left">${esc(i.time)}</td><td style="text-align:left"><span class="badge badge-sm ${i.action === 'เพิ่ม' ? 'badge-success' : 'badge-warning'}">${esc(i.action)}</span></td><td style="text-align:left">${/^\d{4}-\d{2}$/.test(i.month) ? monthLabel(i.month) : esc(i.month)}</td><td style="text-align:left">${esc(name(i.device))}<br><span class="dev">${esc(i.device)}</span></td><td style="text-align:left">${esc(i.before || '–')}</td><td style="text-align:left"><b>${esc(i.after)}</b></td></tr>`).join('')
-          : '<tr><td colspan="6" style="text-align:center" class="p-6">ยังไม่มีประวัติ (เริ่มบันทึกหลังอัปเดต Apps Script)</td></tr>') + '</tbody>';
+      t.innerHTML = '<thead><tr><th style="text-align:left">เวลา</th><th style="text-align:left">การกระทำ</th><th style="text-align:left">เดือน</th><th style="text-align:left">หอผู้ป่วย</th><th style="text-align:left">ก่อน (L1 / L2)</th><th style="text-align:left">หลัง (L1 / L2)</th><th style="text-align:left">ผู้แก้ไข</th></tr></thead><tbody>'
+        + (out.items.length ? out.items.map((i) => `<tr><td style="text-align:left">${esc(i.time)}</td><td style="text-align:left"><span class="badge badge-sm ${/^เพิ่ม/.test(i.action) ? 'badge-success' : 'badge-warning'}">${esc(i.action)}</span></td><td style="text-align:left">${/^\d{4}-\d{2}$/.test(i.month) ? monthLabel(i.month) : esc(i.month)}</td><td style="text-align:left">${esc(name(i.device))}<br><span class="dev">${esc(i.device)}</span></td><td style="text-align:left">${esc(i.before || '–')}</td><td style="text-align:left"><b>${esc(i.after)}</b></td><td style="text-align:left">${i.user ? `<span class="badge badge-sm badge-ghost">${esc(i.user)}</span>` : '<span class="opacity-50">–</span>'}</td></tr>`).join('')
+          : '<tr><td colspan="7" style="text-align:center" class="p-6">ยังไม่มีประวัติ (เริ่มบันทึกหลังอัปเดต Apps Script)</td></tr>') + '</tbody>';
     } catch (err) { if (!handleAuthError(err)) t.innerHTML = `<tbody><tr><td style="text-align:center" class="p-6">${esc(err.message)}</td></tr></tbody>`; }
   }
 
@@ -251,7 +254,7 @@
 
     $('#loginForm').onsubmit = async (e) => {
       e.preventDefault(); const b = $('#loginBtn'); b.disabled = true; $('#loginErr').textContent = '';
-      try { await login($('#pw').value); } catch (err) { $('#loginErr').textContent = err.message; $('#pw').select(); } finally { b.disabled = !CV.cfg.API_BASE; }
+      try { await login($('#uname').value.trim(), $('#pw').value); } catch (err) { $('#loginErr').textContent = err.message; $('#pw').select(); } finally { b.disabled = !CV.cfg.API_BASE; }
     };
     $('#btnLogout').onclick = () => { if (!S.dirty || confirm('มีข้อมูลที่ยังไม่ได้บันทึก ออกจากระบบหรือไม่?')) logout(); };
     $('#tabEntry').onclick = () => tab('entry'); $('#tabWards').onclick = () => tab('wards'); $('#tabHist').onclick = () => tab('hist'); $('#btnHist').onclick = loadHistory;
@@ -278,7 +281,7 @@
       saveWard({ ward: tr.querySelector('.wn').value.trim(), device: dev, oldDevice: old, active: tr.querySelector('.wa').checked, group: tr.querySelector('.wg').value.trim() }, 'บันทึกแล้ว');
     });
     const saved = getPw();
-    if (saved && CV.cfg.API_BASE) { try { await login(saved); } catch { setPw(null); } }
+    if (saved && saved.p && CV.cfg.API_BASE) { try { await login(saved.u, saved.p); } catch { setPw(null); } }
   }
   init();
 })();

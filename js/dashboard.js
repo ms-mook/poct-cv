@@ -439,6 +439,167 @@
     $('#detailTable').innerHTML = h + '</tbody>';
   }
 
+  /* ------------------------------------------------------------ 4. deep analysis */
+  const metric = (r) => { const v = vals(r, S.level); return v.length ? Math.max(...v) : null; };   // worst value at the selected level
+  const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+  const sd = (a) => { if (a.length < 2) return null; const m = mean(a); return Math.sqrt(a.reduce((x, y) => x + (y - m) ** 2, 0) / (a.length - 1)); };
+  /** months of the fiscal-year context up to the last shown month (used when a single month is selected) */
+  const contextMonths = () => { const ms = monthsShown(); const last = ms[ms.length - 1]; return (S.fy === 'all' ? monthsOf('all') : monthsOf(S.fy)).filter((m) => m <= last); };
+  const wardBtn = (w, right, extra = '') => `<button type="button" class="mover" data-open="${esc(w.device)}" title="${esc(w.ward)} · ${esc(w.device)}"><span class="nm">${esc(shortWard(w))}</span>${extra}<span class="dv">${right}</span></button>`;
+
+  const quadLines = {
+    id: 'quadLines',
+    beforeDatasetsDraw(chart) {
+      const { ctx, chartArea: a, scales: { x, y } } = chart; const t = thr();
+      ctx.save();
+      ctx.fillStyle = css('--bad-bg');
+      const px = x.getPixelForValue(t), py = y.getPixelForValue(t);
+      ctx.fillRect(px, a.top, a.right - px, a.bottom - a.top); ctx.fillRect(a.left, a.top, px - a.left, py - a.top);
+      ctx.strokeStyle = css('--bad'); ctx.setLineDash([4, 4]); ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(px, a.top); ctx.lineTo(px, a.bottom); ctx.moveTo(a.left, py); ctx.lineTo(a.right, py); ctx.stroke();
+      ctx.setLineDash([]); ctx.fillStyle = css('--muted'); ctx.font = `600 11px ${getComputedStyle(document.body).fontFamily}`;
+      ctx.textAlign = 'right'; ctx.fillText('L1 ไม่ผ่าน', a.right - 6, a.bottom - 8);
+      ctx.textAlign = 'left'; ctx.fillText('L2 ไม่ผ่าน', a.left + 6, a.top + 14);
+      ctx.restore();
+    }
+  };
+  function renderScatter() {
+    const months = monthsShown(), t = thr();
+    // one point per ward × month (ND / missing excluded) – shows WHERE failures happen: L1 only, L2 only, or both
+    const pts = [];
+    for (const w of W()) for (const m of months) { const r = rowOf(w.device, m); if (r && r.l1 !== null && r.l2 !== null) pts.push({ w, m, x: r.l1, y: r.l2 }); }
+    const q = { ok: [], l1: [], l2: [], both: [] };
+    pts.forEach((p) => q[p.x >= t && p.y >= t ? 'both' : p.x >= t ? 'l1' : p.y >= t ? 'l2' : 'ok'].push(p));
+    const ds = (label, arr, color, style) => ({ label: `${label} (${arr.length})`, data: arr, backgroundColor: color + (style === 'circle' ? '99' : ''), borderColor: css('--solid'), borderWidth: 1, pointRadius: style === 'circle' ? 4 : 6, pointHoverRadius: 8, pointStyle: style });
+    const opt = baseOptions();
+    const maxV = Math.min(Math.max(t * 1.4, ...pts.map((p) => Math.max(p.x, p.y))) * 1.05, 40);
+    opt.interaction = { mode: 'nearest', intersect: true };
+    opt.scales.x = { type: 'linear', min: 0, max: maxV, title: { display: true, text: '%CV L1', color: css('--ink-2') }, grid: { color: css('--grid') }, ticks: { color: css('--ink-2') } };
+    opt.scales.y = { min: 0, max: maxV, title: { display: true, text: '%CV L2', color: css('--ink-2') }, grid: { color: css('--grid') }, ticks: { color: css('--ink-2') } };
+    opt.plugins.tooltip.callbacks = { label: (c) => ` ${c.raw.w.ward} · ${monthLabel(c.raw.m)}: L1 ${c.raw.x.toFixed(2)} · L2 ${c.raw.y.toFixed(2)}` };
+    opt.onClick = (e, els) => { if (els[0]) openDetail(els[0].element.$context.raw.w.device); };
+    opt.onHover = (e, els) => { e.native.target.style.cursor = els.length ? 'pointer' : 'default'; };
+    draw('scatter', $('#scatterChart'), { type: 'scatter', options: opt, plugins: [quadLines], data: { datasets: [
+      ds('ผ่านทั้งคู่', q.ok, css('--ok'), 'circle'), ds('ไม่ผ่านเฉพาะ L1', q.l1, css('--l1'), 'rect'),
+      ds('ไม่ผ่านเฉพาะ L2', q.l2, css('--l2'), 'triangle'), ds('ไม่ผ่านทั้งคู่', q.both, css('--bad'), 'rectRot')] } });
+    const n = pts.length || 1;
+    const box = (lbl, arr, color, hint) => `<div class="rounded-lg p-2" style="background:var(--nd-bg)"><div class="font-bold" style="color:${color}">${arr.length} ครั้ง (${((arr.length / n) * 100).toFixed(1)}%)</div><div>${lbl}</div><div class="opacity-70">${hint}</div></div>`;
+    $('#quadStats').innerHTML = box('ผ่านทั้ง L1/L2', q.ok, 'var(--ok)', 'ปกติ')
+      + box('ไม่ผ่านเฉพาะ L1', q.l1, 'var(--l1)', 'ดูสารควบคุมระดับต่ำ')
+      + box('ไม่ผ่านเฉพาะ L2', q.l2, 'var(--l2)', 'ดูสารควบคุมระดับสูง')
+      + box('ไม่ผ่านทั้งคู่', q.both, 'var(--bad)', 'สงสัยตัวเครื่อง/วิธีทำ');
+  }
+
+  function renderMovers() {
+    let a, b, note;
+    if (S.month) {
+      const ctx = contextMonths(); b = [S.month]; a = ctx.filter((m) => m < S.month).slice(-3);
+      note = `เทียบ ${monthLabel(S.month)} กับค่าเฉลี่ย ${a.length} เดือนก่อนหน้า`;
+    } else {
+      const ms = monthsShown(); const h = Math.floor(ms.length / 2); a = ms.slice(0, h); b = ms.slice(ms.length - h);
+      note = a.length ? `เทียบ %CV เฉลี่ยครึ่งหลัง (${monthLabel(b[0])}–${monthLabel(b[b.length - 1])}) กับครึ่งแรก (${monthLabel(a[0])}–${monthLabel(a[a.length - 1])})` : '';
+    }
+    note += ` · ใช้ค่า${S.level === 'ALL' ? 'ที่สูงกว่าระหว่าง L1/L2' : ' ' + S.level} · ค่าลบ = ดีขึ้น`;
+    if (!a.length || !b.length) { $('#moverNote').textContent = 'ต้องมีข้อมูลอย่างน้อย 2 เดือน'; $('#moversUp').innerHTML = $('#moversDown').innerHTML = ''; return; }
+    $('#moverNote').textContent = note;
+    const avgOver = (w, ms) => mean(ms.map((m) => metric(rowOf(w.device, m))).filter((v) => v !== null));
+    const list = W().map((w) => { const x = avgOver(w, a), y = avgOver(w, b); return x === null || y === null ? null : { w, d: y - x, x, y }; }).filter(Boolean);
+    const fmtD = (d) => `${d > 0 ? '+' : ''}${d.toFixed(2)}`;
+    const row = (it) => wardBtn(it.w, fmtD(it.d), `<span class="dev">${it.x.toFixed(2)} → ${it.y.toFixed(2)}</span>`);
+    const up = list.filter((x) => x.d < 0).sort((p, q) => p.d - q.d).slice(0, 5);
+    const down = list.filter((x) => x.d > 0).sort((p, q) => q.d - p.d).slice(0, 5);
+    $('#moversUp').innerHTML = up.map(row).join('') || '<div class="text-sm opacity-60">–</div>';
+    $('#moversDown').innerHTML = down.map(row).join('') || '<div class="text-sm opacity-60">–</div>';
+  }
+
+  function renderVolatility() {
+    const ms = S.month ? contextMonths() : monthsShown();
+    const list = W().map((w) => {
+      const v = ms.map((m) => metric(rowOf(w.device, m))).filter((x) => x !== null);
+      const fails = ms.some((m) => passOf(rowOf(w.device, m) || NULLROW, S.level, thr()) === false);
+      return v.length >= 3 && !fails ? { w, sd: sd(v), lo: Math.min(...v), hi: Math.max(...v), n: v.length } : null;
+    }).filter(Boolean).sort((p, q) => q.sd - p.sd);
+    const top = list.slice(0, 8), maxSd = top[0]?.sd || 1;
+    $('#volNote').textContent = `เครื่องที่ผ่านเกณฑ์ทุกเดือน (${ms.length > 1 ? monthLabel(ms[0]) + '–' + monthLabel(ms[ms.length - 1]) : ''}) เรียงตามส่วนเบี่ยงเบนมาตรฐานของ %CV · แกว่งมาก = ควบคุมไม่สม่ำเสมอ อาจไม่ผ่านในอนาคต`;
+    $('#volList').innerHTML = top.map((it) => wardBtn(it.w, `SD ${it.sd.toFixed(2)}`, `<span class="dev">${it.lo.toFixed(2)}–${it.hi.toFixed(2)}</span><span class="vbar"><i style="width:${(it.sd / maxSd) * 100}%"></i></span>`)).join('')
+      || '<div class="text-sm opacity-60">ต้องมีข้อมูลอย่างน้อย 3 เดือน</div>';
+  }
+
+  function renderCalendar() {
+    const ms = S.month ? contextMonths() : monthsShown();
+    const only = $('#calOnlyGap').checked;
+    const st = (w, m) => { const r = rowOf(w.device, m); if (!r) return 'miss'; if (isND(r)) return 'nd'; if (r.l1 !== null && r.l2 !== null) return 'ok'; if (r.l1 !== null || r.l2 !== null) return 'part'; return 'miss'; };
+    const lab = { ok: 'มีค่าครบ', part: 'มีค่าเดียว', nd: 'ND ไม่ได้ทำ', miss: 'ไม่มีข้อมูล' };
+    let rows = W().filter((w) => w.active).map((w) => { const s = ms.map((m) => st(w, m)); return { w, s, gaps: s.filter((x) => x !== 'ok').length, nd: s.filter((x) => x === 'nd').length }; });
+    const totalGaps = rows.filter((r) => r.gaps).length;
+    if (only) rows = rows.filter((r) => r.gaps);
+    rows.sort((p, q) => q.gaps - p.gaps || p.w.no - q.w.no);
+    const perMonth = ms.map((m, i) => { const act = W().filter((w) => w.active); return act.length ? Math.round((act.filter((w) => st(w, m) === 'ok').length / act.length) * 100) : 0; });
+    let h = '<thead><tr><th class="sticky-l">หอผู้ป่วย</th>' + ms.map((m) => `<th>${monthLabel(m)}</th>`).join('') + '<th>ND</th><th>ขาด</th></tr></thead><tbody>';
+    h += '<tr><td class="sticky-l"><b>ครบ (%)</b></td>' + perMonth.map((p) => `<td><b style="color:${p === 100 ? 'var(--ok)' : p >= 90 ? 'var(--warn)' : 'var(--bad)'}">${p}</b></td>`).join('') + '<td></td><td></td></tr>';
+    for (const r of rows) h += `<tr data-dev="${esc(r.w.device)}" style="cursor:pointer"><td class="sticky-l">${esc(shortWard(r.w))}</td>` + r.s.map((x, i) => `<td title="${monthLabel(ms[i])}: ${lab[x]}"><span class="cal-dot ${x}"></span></td>`).join('') + `<td>${r.nd || ''}</td><td>${(r.gaps - r.nd) || ''}</td></tr>`;
+    if (!rows.length) h += `<tr><td colspan="${ms.length + 3}" style="text-align:center" class="p-4">ข้อมูลครบทุกหอทุกเดือน</td></tr>`;
+    $('#calTable').innerHTML = h + '</tbody>';
+    $('#calNote').textContent = `หอที่เปิดใช้งาน ${W().filter((w) => w.active).length} หอ · มี ND หรือขาดข้อมูลอย่างน้อย 1 เดือน ${totalGaps} หอ`;
+  }
+
+  function renderAnalysis() {
+    $('#sub4').textContent = `${periodTxt()} · ${LV_TXT()}${S.group ? ' · กลุ่ม ' + S.group : ''} · ND ไม่นำมาคำนวณ`;
+    renderScatter(); renderMovers(); renderVolatility(); renderCalendar();
+  }
+
+  /* ------------------------------------------------------------ 5. one-page meeting summary */
+  function openOnePage() {
+    const A = analyse(); if (!A) return toast('ยังไม่มีข้อมูล', 'warning');
+    const t = thr(), tg = S.data.target, s = A.lastStat;
+    $('#opSub').textContent = `โรงพยาบาลศรีนครินทร์ · เครื่อง ACCU-Chek Inform II · ข้อมูลเดือน ${monthLabel(A.last, true)} (${S.fy === 'all' ? 'ทุกปีงบประมาณ' : 'ปีงบประมาณ ' + S.fy}) · ${LV_TXT()}${S.group ? ' · กลุ่ม ' + S.group : ''} · เกณฑ์ผ่าน %CV < ${t} · เป้าหมาย ≥ ${tg}%`;
+    const pct = s.pct, dP = pct !== null && A.prevStat?.pct != null ? pct - A.prevStat.pct : null;
+    const col = pct === null ? '#555' : pct >= tg ? '#17794a' : pct >= tg - 10 ? '#a15c07' : '#b4231f';
+    const kpi = (k, v, d, c) => `<div class="op-kpi"><div class="k">${k}</div><div class="v" style="color:${c || '#111'}">${v}</div><div class="d">${d}</div></div>`;
+    $('#opKpis').innerHTML = kpi('ร้อยละเครื่องที่ผ่านเกณฑ์', pct === null ? '–' : pct.toFixed(1) + '%', `ผ่าน ${s.p}/${s.n} เครื่อง${dP === null ? '' : ` · ${dP >= 0 ? '+' : ''}${dP.toFixed(1)} จุดจาก ${monthLabel(A.prev)}`}`, col)
+      + kpi('เครื่องที่ไม่ผ่าน', A.failing.length, A.repeat.length ? `ไม่ผ่านต่อเนื่อง ≥ 2 เดือน ${A.repeat.length} เครื่อง` : 'ไม่มีเครื่องที่ไม่ผ่านต่อเนื่อง', A.failing.length ? '#b4231f' : '#17794a')
+      + kpi('ใกล้เกณฑ์ (เฝ้าระวัง)', A.watch.length, `%CV ≥ ${watchAt().toFixed(2)} แต่ยังผ่าน`, A.watch.length ? '#a15c07' : '#17794a')
+      + kpi('ความครบถ้วนของข้อมูล', A.active ? Math.round((A.recorded / A.active) * 100) + '%' : '–', `บันทึก ${A.recorded}/${A.active} หอ${A.nd ? ` · ND ${A.nd}` : ''}`, A.missing.length ? '#a15c07' : '#17794a');
+    // notes
+    const notes = [];
+    if (A.avg !== null) notes.push(`ค่าเฉลี่ยร้อยละผ่านเกณฑ์ ${S.month ? monthLabel(S.month, true) : periodTxt()} = ${A.avg.toFixed(1)}%${A.prevFyAvg !== null ? ` (ปีงบก่อน ${A.prevFyAvg.toFixed(1)}%)` : ''}`);
+    const trendMs = (S.fy === 'all' ? monthsOf('all') : monthsOf(S.fy)).filter((m) => m <= A.last);
+    const met = trendMs.filter((m) => (monthStat(m, S.level).pct ?? -1) >= tg).length;
+    notes.push(`ถึงเป้าหมาย ${tg}% จำนวน ${met} จาก ${trendMs.length} เดือน`);
+    if (A.l1 !== null && A.l2 !== null) notes.push(`ร้อยละผ่านเฉลี่ย L1 ${A.l1.toFixed(1)}% · L2 ${A.l2.toFixed(1)}%`);
+    if (A.evaluated) notes.push(`${A.perfect}/${A.evaluated} เครื่องผ่านเกณฑ์ทุกเดือนในช่วงที่เลือก`);
+    $('#opNotes').innerHTML = notes.map((n) => `<li>${esc(n)}</li>`).join('');
+    // action list
+    const acts = [], seen = new Set();
+    const v = (w) => { const r = rowOf(w.device, A.last); return r ? [r.l1, r.l2].map((x) => (x === null ? '–' : x.toFixed(2))).join(' / ') : '–'; };
+    for (const x of A.repeat) { seen.add(x.w.device); acts.push([x.w, 'bad', `ไม่ผ่านต่อเนื่อง ${x.streak} เดือน`, v(x.w), 'ตรวจสอบเครื่อง/lot สารควบคุม ส่งตรวจสอบ']); }
+    for (const w of A.failing) if (!seen.has(w.device)) { seen.add(w.device); acts.push([w, 'bad', 'ไม่ผ่านเดือนล่าสุด', v(w), 'หาสาเหตุ ทำ QC ซ้ำ ติดตามเดือนถัดไป']); }
+    for (const x of A.watch) if (!seen.has(x.w.device)) { seen.add(x.w.device); acts.push([x.w, 'warn', 'ใกล้เกณฑ์', v(x.w), 'เฝ้าระวัง']); }
+    for (const w of A.missing) acts.push([w, 'info', 'ไม่มีข้อมูล', '–', 'ติดตามการส่งผล QC']);
+    for (const w of W().filter((x) => x.active && isND(rowOf(x.device, A.last)))) acts.push([w, 'info', 'ND ไม่ได้ทำ', '–', 'ติดตามการทำ QC']);
+    const MAXR = 13, shown = acts.slice(0, MAXR);
+    $('#opActions').innerHTML = '<thead><tr><th>หอผู้ป่วย</th><th>ประเด็น</th><th>%CV L1 / L2</th><th>การดำเนินการ</th></tr></thead><tbody>'
+      + (shown.length ? shown.map(([w, c, issue, val, act]) => `<tr><td><b>${esc(shortWard(w))}</b> <span style="color:#777;font-size:9.5px">${esc(w.device)}</span></td><td><span class="tag ${c}">${issue}</span></td><td>${val}</td><td>${act}</td></tr>`).join('')
+        : '<tr><td colspan="4" style="text-align:center;padding:14px">ไม่มีหอที่ต้องดำเนินการ – ผ่านเกณฑ์และส่งข้อมูลครบทุกหอ</td></tr>')
+      + (acts.length > MAXR ? `<tr><td colspan="4" style="color:#555">และอีก ${acts.length - MAXR} รายการ (ดูใน Dashboard หัวข้อ 3)</td></tr>` : '') + '</tbody>';
+    $('#opFootL').textContent = `จัดทำจากระบบติดตาม %CV POCT Glucose · พิมพ์เมื่อ ${new Date().toLocaleString('th-TH', { dateStyle: 'long', timeStyle: 'short' })}`;
+    $('#onepage').hidden = false; document.documentElement.classList.add('op-mode'); document.body.style.overflow = 'hidden';
+    // chart: pass rate per month up to the reported month, fixed light colours for paper
+    const labels = trendMs.map((m) => monthLabel(m)), key = S.level;
+    const data = trendMs.map((m) => monthStat(m, key).pct);
+    const opt = baseOptions(); opt.animation = false;
+    for (const ax of ['x', 'y']) { opt.scales[ax].ticks.color = '#333'; }
+    opt.scales.y.grid.color = '#e5e9e7'; opt.scales.y.max = 105; opt.scales.y.ticks.callback = (x) => (x <= 100 ? x + '%' : '');
+    opt.plugins.legend.labels.color = '#222'; opt.plugins.legend.position = 'bottom';
+    draw('op', $('#opChart'), { type: 'bar', plugins: [valueLabelsDark], options: opt, data: { labels, datasets: [
+      { label: `ร้อยละผ่านเกณฑ์ (${LV_TXT()})`, data, backgroundColor: data.map((x, i) => (trendMs[i] === A.last ? '#0b6b5b' : '#8fc7b8')), borderRadius: 4, maxBarThickness: 34, showLabels: true },
+      { type: 'line', label: `เป้าหมาย ${tg}%`, data: trendMs.map(() => tg), borderColor: '#17794a', borderDash: [4, 4], borderWidth: 2, pointRadius: 0 }] } });
+    $('#opPrint').focus();
+  }
+  const valueLabelsDark = { id: 'valueLabelsDark', afterDatasetsDraw(chart) { const { ctx } = chart; ctx.save(); ctx.font = `700 10px ${getComputedStyle(document.body).fontFamily}`; ctx.fillStyle = '#222'; ctx.textAlign = 'center';
+    chart.data.datasets.forEach((ds, i) => { if (!ds.showLabels) return; chart.getDatasetMeta(i).data.forEach((b, j) => { const x = ds.data[j]; if (x != null) ctx.fillText(x.toFixed(0) + '%', b.x, b.y - 4); }); }); ctx.restore(); } };
+  function closeOnePage() { $('#onepage').hidden = true; document.documentElement.classList.remove('op-mode'); document.body.style.overflow = ''; S.charts.op?.destroy(); }
+
   /* ------------------------------------------------------------ state, toast, wiring */
   function toast(msg, kind) {
     const el = document.createElement('div');
@@ -471,7 +632,7 @@
       $('#barTable').innerHTML = ''; $('#matrix').innerHTML = '<tbody><tr><td class="p-6" style="text-align:center">ยังไม่มีข้อมูลในปีงบประมาณนี้</td></tr></tbody>';
       return;
     }
-    renderBar(); renderPicker(); renderLine(); renderMatrix(); syncUrl();
+    renderBar(); renderPicker(); renderLine(); renderMatrix(); renderAnalysis(); syncUrl();
   }
   function setBanner(html) { const b = $('#banner'); b.hidden = !html; $('#bannerText').innerHTML = html || ''; }
 
@@ -535,11 +696,15 @@
     $('#chkMean').onchange = (e) => { S.mean = e.target.checked; renderLine(); };
     for (const id of ['#tblSearch', '#onlyFail', '#sortSel']) $(id).addEventListener(id === '#tblSearch' ? 'input' : 'change', renderMatrix);
     $('#btnCsv').onclick = downloadCsv;
+    $('#calOnlyGap').onchange = renderCalendar;
+    $('#analysis').addEventListener('click', (e) => { const b = e.target.closest('[data-open],tr[data-dev]'); if (b) openDetail(b.dataset.open || b.dataset.dev); });
+    $('#btnOnePage').onclick = openOnePage; $('#opClose').onclick = closeOnePage; $('#opPrint').onclick = () => window.print();
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#onepage').hidden && !$('#detail').open) closeOnePage(); });
     $('#matrix').addEventListener('click', (e) => { const tr = e.target.closest('tr[data-dev]'); if (tr) openDetail(tr.dataset.dev); });
     $('#matrix').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { const tr = e.target.closest('tr[data-dev]'); if (tr) { e.preventDefault(); openDetail(tr.dataset.dev); } } });
     $('#watchlist').addEventListener('click', (e) => { const b = e.target.closest('[data-open]'); if (b) openDetail(b.dataset.open); });
     $('#detail').addEventListener('close', () => { S.charts.detail?.destroy(); });
-    document.addEventListener('themechange', () => { if (S.data && monthsShown().length) { renderBar(); renderLine(); renderPicker(); } });
+    document.addEventListener('themechange', () => { if (S.data && monthsShown().length) { renderBar(); renderLine(); renderPicker(); renderScatter(); } });
 
     // scrollspy
     const links = [...document.querySelectorAll('.nav-link[data-sec]')];

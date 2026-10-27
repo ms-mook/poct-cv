@@ -30,10 +30,11 @@
       </span>
     </a>
     <nav class="ml-auto hidden items-center gap-1 md:flex" aria-label="เมนูหน้า">
-      <a class="nav-link" href="#summary" data-sec="summary"><i data-i="layout-dashboard"></i> สรุปผู้บริหาร</a>
+      <a class="nav-link" href="#summary" data-sec="summary"><i data-i="layout-dashboard"></i> สรุปภาพรวม</a>
       <a class="nav-link" href="#passrate" data-sec="passrate"><i data-i="chart-column"></i> ร้อยละผ่านเกณฑ์</a>
       <a class="nav-link" href="#trend" data-sec="trend"><i data-i="chart-line"></i> แนวโน้ม</a>
       <a class="nav-link" href="#detail-sec" data-sec="detail-sec"><i data-i="table-2"></i> รายหอผู้ป่วย</a>
+      <a class="nav-link" href="#analysis" data-sec="analysis"><i data-i="scan-eye"></i> วิเคราะห์</a>
     </nav>
     <div class="ml-auto flex items-center gap-1 md:ml-2">
       <button class="btn btn-ghost btn-sm btn-square" id="btnTheme" type="button" aria-label="สลับโหมดมืด/สว่าง" title="สลับโหมดมืด/สว่าง"><i data-i="moon" data-c="icon-lg"></i></button>
@@ -62,6 +63,7 @@
     <span class="badge badge-ghost gap-1" id="thrNote"><i data-i="target"></i> เกณฑ์ผ่าน %CV &lt; 6.7</span>
     <div class="ml-auto flex items-center gap-1">
       <button class="btn btn-ghost btn-sm gap-1" id="btnShare" type="button"><i data-i="share-2"></i><span class="hidden sm:inline">แชร์ลิงก์</span></button>
+      <button class="btn btn-primary btn-sm gap-1" id="btnOnePage" type="button"><i data-i="file-text"></i><span class="hidden sm:inline">สรุปประชุม 1 หน้า</span></button>
       <button class="btn btn-ghost btn-sm gap-1" id="btnPrint" type="button"><i data-i="printer"></i><span class="hidden sm:inline">พิมพ์ / PDF</span></button>
     </div>
   </div>
@@ -73,7 +75,7 @@
   <!-- Executive summary -->
   <section id="summary" class="grid gap-4" aria-labelledby="hSummary">
     <div class="glass reveal p-5" id="hero">
-      <div class="flex flex-wrap items-center gap-2 text-sm opacity-80"><i data-i="sparkles"></i><h2 id="hSummary" class="font-bold">สรุปผู้บริหาร</h2><span id="heroPeriod"></span></div>
+      <div class="flex flex-wrap items-center gap-2 text-sm opacity-80"><i data-i="sparkles"></i><h2 id="hSummary" class="font-bold">สรุปภาพรวม</h2><span id="heroPeriod"></span></div>
       <p class="mt-2 text-xl font-extrabold leading-snug sm:text-2xl" id="heroText"><span class="skeleton-glass inline-block h-7 w-2/3"></span></p>
     </div>
     <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" id="kpis" aria-label="ตัวชี้วัดหลัก"></div>
@@ -156,8 +158,70 @@
     </div>
   </section>
 
+
+  <!-- 4 -->
+  <section class="glass reveal p-5" id="analysis" aria-labelledby="h4">
+    <h2 id="h4" class="flex items-center gap-2 text-lg font-extrabold"><span class="badge badge-primary">4</span><i data-i="scan-eye"></i> วิเคราะห์เชิงลึก</h2>
+    <p class="mb-4 mt-1 text-sm opacity-75" id="sub4"></p>
+    <div class="grid gap-4 xl:grid-cols-2">
+      <div class="rounded-2xl border border-[var(--line)] p-4">
+        <h3 class="flex items-center gap-2 font-bold"><i data-i="git-compare"></i> 4.1 L1 เทียบ L2 รายเครื่อง</h3>
+        <p class="mb-2 text-xs opacity-70">แต่ละจุด = ผล 1 เครื่องใน 1 เดือน · โซนแดง = ไม่ผ่าน · ใช้แยกว่าปัญหามาจาก L1, L2 หรือทั้งคู่ · กดจุดเพื่อดูรายละเอียดหอ</p>
+        <div class="chart-box" style="height:360px"><canvas id="scatterChart" role="img" aria-label="กราฟจุด %CV L1 เทียบ L2 รายเครื่อง"></canvas></div>
+        <div class="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4" id="quadStats"></div>
+      </div>
+      <div class="rounded-2xl border border-[var(--line)] p-4">
+        <h3 class="flex items-center gap-2 font-bold"><i data-i="trending-up"></i> 4.2 หอที่ดีขึ้น / แย่ลงมากที่สุด</h3>
+        <p class="mb-3 text-xs opacity-70" id="moverNote"></p>
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div><div class="mb-1 flex items-center gap-1 text-sm font-bold" style="color:var(--ok)"><i data-i="trophy"></i> ดีขึ้น (ควรชมเชย)</div><div class="grid gap-1" id="moversUp"></div></div>
+          <div><div class="mb-1 flex items-center gap-1 text-sm font-bold" style="color:var(--bad)"><i data-i="trending-down"></i> แย่ลง (ควรติดตาม)</div><div class="grid gap-1" id="moversDown"></div></div>
+        </div>
+      </div>
+      <div class="rounded-2xl border border-[var(--line)] p-4">
+        <h3 class="flex items-center gap-2 font-bold"><i data-i="activity"></i> 4.3 ผ่านเกณฑ์แต่ %CV แกว่งมาก (สัญญาณเตือนล่วงหน้า)</h3>
+        <p class="mb-3 text-xs opacity-70" id="volNote"></p>
+        <div class="grid gap-1" id="volList"></div>
+      </div>
+      <div class="rounded-2xl border border-[var(--line)] p-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h3 class="flex items-center gap-2 font-bold"><i data-i="calendar-days"></i> 4.4 ปฏิทินความครบถ้วนของข้อมูล</h3>
+          <label class="label cursor-pointer gap-2 py-0 text-xs no-print"><input type="checkbox" class="checkbox checkbox-xs checkbox-primary" id="calOnlyGap" checked> เฉพาะหอที่มี ND / ขาดข้อมูล</label>
+        </div>
+        <p class="mb-2 text-xs opacity-70" id="calNote"></p>
+        <div class="tbl-scroll" style="max-height:420px"><table class="cal-table" id="calTable"></table></div>
+        <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs opacity-80">
+          <span><span class="cal-dot ok"></span> มีค่าครบ</span><span><span class="cal-dot part"></span> มีค่าเดียว</span><span><span class="cal-dot nd"></span> ND ไม่ได้ทำ</span><span><span class="cal-dot miss"></span> ไม่มีข้อมูล</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <footer class="py-2 text-center text-xs opacity-70" id="foot"></footer>
 </main>
+
+<!-- one-page meeting summary (screen overlay + its own print layout) -->
+<section id="onepage" hidden aria-label="สรุปประชุม 1 หน้า">
+  <div class="op-bar no-print">
+    <b class="flex items-center gap-2"><i data-i="file-text"></i> สรุปสำหรับประชุมกรรมการคุณภาพ (1 หน้า)</b>
+    <span class="ml-auto flex gap-2"><button class="btn btn-primary btn-sm gap-1" id="opPrint" type="button"><i data-i="printer"></i> พิมพ์ / PDF</button>
+    <button class="btn btn-sm gap-1" id="opClose" type="button"><i data-i="x"></i> ปิด</button></span>
+  </div>
+  <div class="op-page" id="opPage">
+    <div class="op-head">
+      <img src="img/icon-192.png" alt="" width="54" height="54">
+      <div><div class="op-title">รายงานผลการควบคุมคุณภาพ (IQC) เครื่องตรวจน้ำตาลปลายนิ้ว POCT Glucose</div>
+        <div class="op-sub" id="opSub"></div></div>
+    </div>
+    <div class="op-kpis" id="opKpis"></div>
+    <div class="op-grid">
+      <div class="op-box"><div class="op-h">ร้อยละของเครื่องที่ผ่านเกณฑ์ รายเดือน</div><div class="op-chart"><canvas id="opChart"></canvas></div>
+        <div class="op-h" style="margin-top:8px">ข้อสังเกตสำคัญ</div><ul class="op-notes" id="opNotes"></ul></div>
+      <div class="op-box"><div class="op-h">หอผู้ป่วยที่ต้องดำเนินการ</div><table class="op-table" id="opActions"></table></div>
+    </div>
+    <div class="op-foot"><span id="opFootL"></span><span>ผู้รายงาน ............................................ &nbsp; ผู้รับรอง ............................................</span></div>
+  </div>
+</section>
 
 <dialog id="detail" class="modal" aria-labelledby="dTitle">
   <div class="modal-box glass glass-strong max-w-4xl">
