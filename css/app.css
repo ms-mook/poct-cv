@@ -170,3 +170,8 @@ details > summary::-webkit-details-marker { display: none; }
 /* the hidden attribute must win over component display classes (grid/flex/btn) */
 [hidden] { display: none !important; }
 
+
+/* wide screens: charts grow with the viewport */
+.chart-box { height: clamp(340px, 40vh, 560px); }
+.chart-box.tall { height: clamp(410px, 52vh, 700px); }
+@media print { .chart-box, .chart-box.tall { height: 280px !important; } }

@@ -16,8 +16,8 @@
 <body>
 <div class="bg-mesh" aria-hidden="true"><i></i><i></i><i></i></div>
 
-<header class="sticky top-0 z-40 px-3 pt-3 no-print">
-  <div class="glass mx-auto flex max-w-7xl items-center gap-3 px-3 py-2">
+<header class="sticky top-0 z-40 px-3 lg:px-6 pt-3 no-print">
+  <div class="glass mx-auto flex max-w-none items-center gap-3 px-3 lg:px-6 py-2">
     <a href="index.html" class="flex min-w-0 items-center gap-3">
       <span class="logo-mark grid h-10 w-10 flex-none place-items-center rounded-xl"><i data-i="droplet" data-c="icon-lg"></i></span>
       <span class="min-w-0 leading-tight">
@@ -38,12 +38,12 @@
   </div>
 </header>
 
-<div id="banner" class="no-print mx-auto mt-3 max-w-7xl px-3" hidden>
+<div id="banner" class="no-print mx-auto mt-3 max-w-none px-3 lg:px-6" hidden>
   <div class="glass flex items-start gap-3 px-4 py-3 text-sm" role="status"><i data-i="triangle-alert" data-c="icon-lg"></i><div id="bannerText"></div></div>
 </div>
 
-<div id="toolbar" class="z-30 mx-auto max-w-7xl px-3 pt-3 md:sticky md:top-[72px]">
-  <div class="glass flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2" role="region" aria-label="ตัวกรอง">
+<div id="toolbar" class="z-30 mx-auto max-w-none px-3 lg:px-6 pt-3 md:sticky md:top-[72px]">
+  <div class="glass flex flex-wrap items-center gap-x-4 gap-y-2 px-3 lg:px-6 py-2" role="region" aria-label="ตัวกรอง">
     <label class="flex items-center gap-2 text-sm font-semibold" for="fySel"><i data-i="calendar-days"></i><span class="hidden sm:inline">ปีงบประมาณ</span></label>
     <select id="fySel" class="select select-bordered select-sm bg-transparent"></select>
     <span id="grpWrap" class="flex items-center gap-2" hidden><i data-i="building-2"></i><select id="grpSel" class="select select-bordered select-sm bg-transparent" aria-label="กลุ่มหอ"></select></span>
@@ -60,7 +60,7 @@
   </div>
 </div>
 
-<main class="mx-auto grid max-w-7xl gap-5 px-3 py-5" id="app">
+<main class="mx-auto grid max-w-none gap-5 px-3 lg:px-6 py-5" id="app">
   <div class="print-only"><h2 id="printTitle" class="text-lg font-bold"></h2></div>
 
   <!-- Executive summary -->
