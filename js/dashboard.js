@@ -6,7 +6,7 @@
   const MAX_SEL = 8;
   const NULLROW = { l1: null, l2: null };
 
-  const S = { group: '', data: null, fy: null, level: 'ALL', selected: [], mean: true, cmp: false, byDev: new Map(), charts: {} };
+  const S = { month: '', group: '', data: null, fy: null, level: 'ALL', selected: [], mean: true, cmp: false, byDev: new Map(), charts: {} };
 
   /* ------------------------------------------------------------ derived data */
   function index() {
@@ -30,7 +30,7 @@
     if (fy === 'all') return [...have].sort();
     return fiscalMonths(fy).filter((m) => have.has(m));
   }
-  const monthsShown = () => monthsOf(S.fy);
+  const monthsShown = () => (S.month ? [S.month] : monthsOf(S.fy));
 
   function monthStat(m, level) {
     let n = 0, p = 0;
@@ -125,10 +125,12 @@
     const lv = S.level, t = thr();
     const last = months[months.length - 1];
     const lastStat = monthStat(last, lv);
-    const idx = months.indexOf(last);
+    const all = monthsOf('all'), idx = all.indexOf(last);        // context for "previous month" and streaks (crosses fiscal years)
     let prev = null, prevStat = null;
-    for (let i = idx - 1; i >= 0; i--) { const s = monthStat(months[i], lv); if (s.n) { prev = months[i]; prevStat = s; break; } }
-    const pcts = months.map((m) => monthStat(m, lv).pct);
+    for (let i = idx - 1; i >= 0; i--) { const s = monthStat(all[i], lv); if (s.n) { prev = all[i]; prevStat = s; break; } }
+    const trend = (S.fy === 'all' ? all : monthsOf(S.fy)).filter((m) => m <= last);
+    const pcts = trend.map((m) => monthStat(m, lv).pct);
+    const trendAll = pcts;
     const active = W().filter((w) => w.active);
     const failing = [], watch = [], repeat = [];
     let recorded = 0, nd = 0; const missing = [];
@@ -142,8 +144,8 @@
       else if (ok === true && Math.max(...vals(r, lv)) >= watchAt()) watch.push({ w, max: Math.max(...vals(r, lv)) });
       // consecutive failing streak ending at the latest month (months without a result are skipped, a pass ends it)
       let streak = 0;
-      for (let i = months.length - 1; i >= 0; i--) {
-        const o = passOf(rowOf(w.device, months[i]) || NULLROW, lv, t);
+      for (let i = idx; i >= 0; i--) {
+        const o = passOf(rowOf(w.device, all[i]) || NULLROW, lv, t);
         if (o === null) continue;
         if (o === false) streak++; else break;
       }
@@ -155,21 +157,22 @@
       const st = wardStats(w.device, months, lv);
       if (st.n >= 1) { evaluated++; if (st.fails === 0) perfect++; }
     }
-    const valid = pcts.filter((v) => v !== null);
+    const valid = months.map((m) => monthStat(m, lv).pct).filter((v) => v !== null);
     const avg = valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : null;
     // previous fiscal year average (same level)
     let prevFyAvg = null;
-    if (S.fy !== 'all') {
+    if (S.fy !== 'all' && !S.month) {
       const pm = monthsOf(S.fy - 1).map((m) => monthStat(m, lv).pct).filter((v) => v !== null);
       if (pm.length) prevFyAvg = pm.reduce((a, b) => a + b, 0) / pm.length;
     }
     // level comparison over period
     const avgOf = (k) => { const a = months.map((m) => monthStat(m, k).pct).filter((v) => v !== null); return a.length ? a.reduce((x, y) => x + y, 0) / a.length : null; };
-    return { months, last, lastStat, prev, prevStat, pcts, failing, watch, repeat, missing, recorded, nd, active: active.length, perfect, evaluated, avg, prevFyAvg, l1: avgOf('L1'), l2: avgOf('L2') };
+    const mpcts = months.map((m) => monthStat(m, lv).pct);
+    return { months, last, lastStat, prev, prevStat, pcts, mpcts, failing, watch, repeat, missing, recorded, nd, active: active.length, perfect, evaluated, avg, prevFyAvg, l1: avgOf('L1'), l2: avgOf('L2') };
   }
 
   const LV_TXT = () => (S.level === 'ALL' ? 'ผ่านทั้ง L1 และ L2' : S.level);
-  const periodTxt = () => (S.fy === 'all' ? 'ทุกปีงบประมาณ' : `ปีงบประมาณ ${S.fy}`);
+  const periodTxt = () => (S.month ? monthLabel(S.month, true) : S.fy === 'all' ? 'ทุกปีงบประมาณ' : `ปีงบประมาณ ${S.fy}`);
 
   function renderSummary() {
     const A = analyse(); const kpis = $('#kpis');
@@ -221,14 +224,14 @@
     if (A.missing.length) add('warn', 'hourglass', `<b>ยังไม่มีข้อมูล ${monthLabel(A.last)} ของ ${A.missing.length} หอ</b> (หอที่เปิดใช้งาน): ${esc(A.missing.slice(0, 4).map(shortWard).join(', '))}${A.missing.length > 4 ? '…' : ''}`);
     if (A.nd) add('info', 'ban', `ND (ไม่ได้ทำ) ${A.nd} หอใน ${monthLabel(A.last)} – <b>ไม่นำมาคำนวณ</b>ร้อยละที่ผ่านเกณฑ์`);
     if (A.evaluated) add('good', 'trophy', `<b>${A.perfect} จาก ${A.evaluated} เครื่อง</b> (${((A.perfect / A.evaluated) * 100).toFixed(0)}%) ผ่านเกณฑ์ทุกเดือนใน${periodTxt()}`);
-    const metN = A.pcts.filter((v) => v !== null && v >= S.data.target).length, evN = A.pcts.filter((v) => v !== null).length;
-    if (evN) add(metN === evN ? 'good' : metN / evN >= .5 ? 'info' : 'warn', 'target', `<b>${metN} จาก ${evN} เดือน</b> ถึงเป้าหมายร้อยละผ่านเกณฑ์ ${S.data.target}% ใน${periodTxt()}`);
+    const metN = A.mpcts.filter((v) => v !== null && v >= S.data.target).length, evN = A.mpcts.filter((v) => v !== null).length;
+    if (evN > 1) add(metN === evN ? 'good' : metN / evN >= .5 ? 'info' : 'warn', 'target', `<b>${metN} จาก ${evN} เดือน</b> ถึงเป้าหมายร้อยละผ่านเกณฑ์ ${S.data.target}% ใน${periodTxt()}`);
     if (S.level === 'ALL' && A.l1 !== null && A.l2 !== null && Math.abs(A.l1 - A.l2) >= 1)
       add('info', 'git-compare', `ตลอด${periodTxt()} <b>${A.l1 < A.l2 ? 'L1' : 'L2'} ไม่ผ่านบ่อยกว่า</b> (เฉลี่ยผ่าน L1 ${A.l1.toFixed(1)}% · L2 ${A.l2.toFixed(1)}%)`);
     if (A.prevFyAvg !== null && A.avg !== null) {
       const d = A.avg - A.prevFyAvg;
       add(d >= 0 ? 'good' : 'bad', d >= 0 ? 'arrow-up-right' : 'arrow-down-right', `ค่าเฉลี่ยร้อยละผ่านเกณฑ์ปีงบ ${S.fy} = <b>${A.avg.toFixed(1)}%</b> ${d >= 0 ? 'สูงกว่า' : 'ต่ำกว่า'}ปีงบ ${S.fy - 1} (${A.prevFyAvg.toFixed(1)}%) อยู่ ${Math.abs(d).toFixed(1)} จุด`);
-    } else if (A.avg !== null) add('info', 'info', `ค่าเฉลี่ยร้อยละผ่านเกณฑ์ ${periodTxt()} = <b>${A.avg.toFixed(1)}%</b> (${A.months.length} เดือน)`);
+    } else if (A.avg !== null) add('info', 'info', `ค่าเฉลี่ยร้อยละผ่านเกณฑ์ ${periodTxt()} = <b>${A.avg.toFixed(1)}%</b>${A.months.length > 1 ? ` (${A.months.length} เดือน)` : ''}`);
     $('#insights').innerHTML = ins.join('');
 
     /* watchlist */
@@ -410,9 +413,9 @@
   /* ------------------------------------------------------------ ward detail dialog */
   function openDetail(dev) {
     const w = wardByDev(dev); if (!w) return;
-    const months = monthsShown(), t = thr();
+    const months = S.fy === 'all' ? monthsOf('all') : monthsOf(S.fy), t = thr();
     $('#dTitle').textContent = w.ward;
-    $('#dSub').textContent = `เครื่อง ${w.device} · ${periodTxt()} · เกณฑ์ผ่าน %CV < ${t}%`;
+    $('#dSub').textContent = `เครื่อง ${w.device} · ${S.fy === 'all' ? 'ทุกปีงบประมาณ' : 'ปีงบประมาณ ' + S.fy} · เกณฑ์ผ่าน %CV < ${t}%`;
     const st = wardStats(dev, months, 'ALL');
     const lastR = [...months].reverse().map((m) => rowOf(dev, m)).find((r) => hasValue(r));
     $('#dChips').innerHTML = `<span class="badge ${st.fails ? 'badge-error' : 'badge-success'} gap-1">${icon(st.fails ? 'triangle-alert' : 'circle-check')} ไม่ผ่าน ${st.fails}/${st.n} เดือน</span>
@@ -444,16 +447,23 @@
   }
   function syncUrl() {
     const p = new URLSearchParams();
-    p.set('fy', S.fy); p.set('lv', S.level); if (S.group) p.set('g', S.group);
+    p.set('fy', S.fy); p.set('lv', S.level); if (S.group) p.set('g', S.group); if (S.month) p.set('m', S.month);
     if (S.selected.length) p.set('w', S.selected.join(','));
     if (S.cmp) p.set('cmp', '1');
     history.replaceState(null, '', '?' + p.toString() + location.hash);
   }
+  function fillMonths() {
+    const ms = monthsOf(S.fy); if (S.month && !ms.includes(S.month)) S.month = '';
+    $('#monSel').innerHTML = '<option value="">ทั้ง' + (S.fy === 'all' ? 'หมด' : 'ปีงบประมาณ') + '</option>' + [...ms].reverse().map((m) => `<option value="${m}">${monthLabel(m, true)}</option>`).join('');
+    $('#monSel').value = S.month;
+    const i = ms.indexOf(S.month); $('#monPrev').disabled = !S.month || i <= 0; $('#monNext').disabled = !S.month || i >= ms.length - 1;
+  }
   function renderAll() {
+    fillMonths();
     $('#thrNote').innerHTML = `${icon('target')} เกณฑ์ผ่าน %CV &lt; <b>${thr()}</b>`;
     $('#watchPct').textContent = Math.round(WATCH_RATIO * 100);
     document.querySelectorAll('#lvlSeg button').forEach((b) => { const on = b.dataset.level === S.level; b.setAttribute('aria-pressed', String(on)); b.classList.toggle('btn-active', on); b.classList.toggle('btn-primary', on); });
-    $('#printTitle').textContent = `รายงาน %CV POCT Glucose · ${periodTxt()} · ${LV_TXT()} · ${new Date().toLocaleDateString('th-TH')}`;
+    $('#printTitle').textContent = `รายงาน %CV POCT Glucose · รพ.ศรีนครินทร์ · ${periodTxt()} · ${LV_TXT()}${S.group ? ' · กลุ่ม ' + S.group : ''} · พิมพ์เมื่อ ${new Date().toLocaleDateString('th-TH')}`;
     renderSummary(); renderGroups();
     if (!monthsShown().length) {
       for (const k of ['bar', 'line']) S.charts[k]?.destroy();
@@ -469,6 +479,10 @@
     $('#btnTheme').onclick = () => { const t = Theme.toggle(); $('#btnTheme').firstElementChild.firstElementChild?.setAttribute('href', `img/icons.svg#${t === 'dark' ? 'sun' : 'moon'}`); };
     $('#btnTheme').firstElementChild.firstElementChild?.setAttribute('href', `img/icons.svg#${Theme.current() === 'dark' ? 'sun' : 'moon'}`);
     $('#btnPrint').onclick = () => window.print();
+    // make canvases crisp at print size, then restore
+    const resizeCharts = () => Object.values(S.charts).forEach((c) => c && c.resize());
+    window.addEventListener('beforeprint', () => { document.querySelectorAll('.reveal').forEach((e) => e.classList.add('in')); resizeCharts(); });
+    window.addEventListener('afterprint', resizeCharts);
     $('#btnShare').onclick = async () => { try { await navigator.clipboard.writeText(location.href); toast('คัดลอกลิงก์ (รวมตัวกรองที่เลือก) แล้ว', 'success'); } catch { toast('คัดลอกไม่สำเร็จ – คัดลอกจากแถบที่อยู่ได้เลย', 'warning'); } };
 
     let data;
@@ -489,10 +503,15 @@
     S.group = groups.includes(q.get('g')) ? q.get('g') : ''; $('#grpSel').value = S.group;
     S.cmp = q.get('cmp') === '1'; $('#chkCmp').checked = S.cmp;
     $('#fySel').value = S.fy;
+    { const m = q.get('m'); S.month = m && monthsOf(S.fy).includes(m) ? m : ''; }
     const w = (q.get('w') || '').split(',').filter((d) => wardByDev(d));
     S.selected = w.length ? w.slice(0, MAX_SEL) : topFailing(3);
 
-    $('#fySel').onchange = (e) => { S.fy = e.target.value === 'all' ? 'all' : Number(e.target.value); S.selected = topFailing(3); renderAll(); };
+    $('#fySel').onchange = (e) => { S.fy = e.target.value === 'all' ? 'all' : Number(e.target.value); S.month = ''; S.selected = topFailing(3); renderAll(); };
+    const setMonth = (m) => { S.month = m; S.selected = topFailing(3); renderAll(); };
+    $('#monSel').onchange = (e) => setMonth(e.target.value);
+    $('#monPrev').onclick = () => { const ms = monthsOf(S.fy), i = ms.indexOf(S.month); if (i > 0) setMonth(ms[i - 1]); };
+    $('#monNext').onclick = () => { const ms = monthsOf(S.fy), i = ms.indexOf(S.month); if (i >= 0 && i < ms.length - 1) setMonth(ms[i + 1]); };
     $('#lvlSeg').onclick = (e) => { const b = e.target.closest('button[data-level]'); if (!b) return; S.level = b.dataset.level; renderAll(); };
     const setGroup = (g) => { S.group = g; $('#grpSel').value = g; S.selected = topFailing(3); renderAll(); };
     $('#grpSel').onchange = (e) => setGroup(e.target.value);
@@ -524,6 +543,7 @@
     }
 
     $('#foot').innerHTML = `${icon('database')} ข้อมูลจาก ${data.source === 'api' ? 'Google Sheet' : 'ไฟล์สำรอง (seed)'}` + (data.generatedAt ? `<span class="sep">·</span>อัปเดตล่าสุด ${new Date(data.generatedAt).toLocaleString('th-TH')}` : '') + `<span class="sep">·</span>เกณฑ์ผ่าน %CV &lt; ${data.threshold}<span class="sep">·</span>ND = ไม่ได้ทำ (ไม่นำมาคำนวณ)`;
+    try { await Promise.all([document.fonts.load('500 14px Sarabun'), document.fonts.load('700 14px Sarabun')]); } catch { /* fonts optional */ }
     renderAll();
   }
   init();

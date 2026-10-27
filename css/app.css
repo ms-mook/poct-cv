@@ -31,7 +31,7 @@
 html { scroll-behavior: smooth; scroll-padding-top: 88px; -webkit-text-size-adjust: 100%; }
 body {
   margin: 0; min-height: 100vh; color: var(--ink); background: var(--page-bg);
-  font-family: "Noto Sans Thai", system-ui, -apple-system, "Segoe UI", sans-serif; font-variant-numeric: tabular-nums;
+  font-family: "Sarabun", "TH Sarabun PSK", "THSarabunPSK", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 1.0625rem; line-height: 1.45; font-variant-numeric: tabular-nums;
 }
 :focus-visible { outline: 3px solid color-mix(in srgb, oklch(var(--p)) 60%, transparent); outline-offset: 2px; }
 
@@ -147,17 +147,42 @@ input.err { outline: 2px solid var(--bad); }
 footer .sep { opacity: .35; margin: 0 .4rem; }
 .toast-pop { animation: pop .3s ease; }
 
-/* ---------- print (executive PDF) ---------- */
+/* ---------- print (executive PDF, A4 landscape) ---------- */
 @media print {
-  @page { size: A4 landscape; margin: 10mm; }
-  html, body { background: #fff !important; color: #000 !important; }
-  .bg-mesh, #banner, .no-print, #toolbar button, .nav-link, header nav, dialog { display: none !important; }
-  #toolbar { position: static !important; }
-  .glass { background: #fff !important; box-shadow: none !important; border: 1px solid #cfd8d4 !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; break-inside: avoid; }
-  .reveal, .js .reveal:not(.in) { opacity: 1 !important; transform: none !important; }
-  .chart-box { height: 280px !important; }
-  .tbl-scroll { max-height: none !important; overflow: visible !important; }
-  .print-only { display: block !important; }
+  @page { size: A4 landscape; margin: 9mm; }
+  html { font-size: 12px !important; }
+  html, body { background: #fff !important; color: #111 !important; }
+  body { font-size: 1rem; line-height: 1.35; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .bg-mesh, #banner, #toolbar, header, dialog, .toast, .no-print, #picker-side, #btnCsv, details > summary { display: none !important; }
+  #app { display: block !important; padding: 0 !important; max-width: none !important; }
+  #app > * { margin-bottom: 8mm; }
+  .glass { background: #fff !important; box-shadow: none !important; border: 1px solid #c9d3cf !important; border-radius: 10px !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; padding: 12px !important; }
+  .reveal, .js .reveal:not(.in) { opacity: 1 !important; transform: none !important; transition: none !important; }
+  .lift { transform: none !important; }
+  .spark path { animation: none !important; stroke-dashoffset: 0 !important; opacity: 1 !important; }
+  /* page 1: executive summary; charts start on a fresh page each */
+  #summary { break-after: page; display: block !important; }
+  #summary > * { margin-bottom: 6mm; }
+  #kpis { display: grid !important; grid-template-columns: repeat(4, 1fr) !important; gap: 8px !important; }
+  #insightRow { display: grid !important; grid-template-columns: 3fr 2fr !important; gap: 8px !important; }
+  #watchlist button { break-inside: avoid; }
+  #watchlist button:nth-child(n+7) { display: none !important; }
+  #passrate, #trend, #groupCard { break-inside: avoid; }
+  #trend .grid { display: block !important; }
+  #trend .grid > .grid { display: none !important; }       /* ward picker (interactive) */
+  .chart-box, .chart-box.tall { height: 230px !important; }
+  #detail-sec { break-before: page; }
+  .tbl-scroll { max-height: none !important; overflow: visible !important; border: 0 !important; background: none !important; }
+  .tbl-scroll table { font-size: .82rem; }
+  .tbl-scroll th, .tbl-scroll td { padding: 3px 5px !important; }
+  .tbl-scroll thead { display: table-header-group; }
+  .tbl-scroll thead th, .tbl-scroll th.sticky-l, .tbl-scroll td.sticky-l { position: static !important; background: #fff !important; box-shadow: none !important; }
+  .tbl-scroll tr { break-inside: avoid; }
+  td.cell-bad { background: #fde1e0 !important; color: #a11d19 !important; }
+  td.cell-watch { background: #feefc7 !important; color: #8a4f06 !important; }
+  td.cell-nd { background: #eee !important; }
+  .print-only { display: block !important; margin-bottom: 6mm; }
+  #foot { margin-top: 4mm; }
 }
 .print-only { display: none; }
 
@@ -174,4 +199,3 @@ details > summary::-webkit-details-marker { display: none; }
 /* wide screens: charts grow with the viewport */
 .chart-box { height: clamp(340px, 40vh, 560px); }
 .chart-box.tall { height: clamp(410px, 52vh, 700px); }
-@media print { .chart-box, .chart-box.tall { height: 280px !important; } }

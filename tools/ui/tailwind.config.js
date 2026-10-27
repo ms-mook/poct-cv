@@ -4,7 +4,7 @@ module.exports = {
   darkMode: ['selector', '[data-theme="dark"]'],
   theme: {
     extend: {
-      fontFamily: { sans: ['"Noto Sans Thai"', 'system-ui', '-apple-system', '"Segoe UI"', 'sans-serif'] }
+      fontFamily: { sans: ['"Sarabun"', '"TH Sarabun PSK"', 'system-ui', '-apple-system', '"Segoe UI"', 'sans-serif'] }
     }
   },
   plugins: [require('daisyui')],

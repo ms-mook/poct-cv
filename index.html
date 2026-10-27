@@ -6,9 +6,8 @@
 <title>ติดตาม %CV POCT Glucose | รพ.ศรีนครินทร์</title>
 <meta name="description" content="แดชบอร์ดผู้บริหาร ติดตามค่า %CV การควบคุมคุณภาพ (IQC L1/L2) เครื่อง ACCU-Chek Inform II แยกตามหอผู้ป่วย โรงพยาบาลศรีนครินทร์">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b6b5b'/%3E%3Cpath d='M16 6c4 5 7 8.4 7 12a7 7 0 0 1-14 0c0-3.600 3-7 7-12z' fill='white'/%3E%3C/svg%3E">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="preload" href="fonts/sarabun-thai-500-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/fonts.css">
 <link rel="stylesheet" href="css/tw.css">
 <link rel="stylesheet" href="css/app.css">
 <script src="js/theme.js"></script>
@@ -46,6 +45,9 @@
   <div class="glass flex flex-wrap items-center gap-x-4 gap-y-2 px-3 lg:px-6 py-2" role="region" aria-label="ตัวกรอง">
     <label class="flex items-center gap-2 text-sm font-semibold" for="fySel"><i data-i="calendar-days"></i><span class="hidden sm:inline">ปีงบประมาณ</span></label>
     <select id="fySel" class="select select-bordered select-sm bg-transparent"></select>
+    <span class="join items-center"><button class="btn btn-sm btn-square join-item" id="monPrev" type="button" aria-label="เดือนก่อนหน้า"><i data-i="chevron-left"></i></button>
+      <select id="monSel" class="select select-bordered select-sm join-item bg-transparent" aria-label="เดือน"></select>
+      <button class="btn btn-sm btn-square join-item" id="monNext" type="button" aria-label="เดือนถัดไป"><i data-i="chevron-right"></i></button></span>
     <span id="grpWrap" class="flex items-center gap-2" hidden><i data-i="building-2"></i><select id="grpSel" class="select select-bordered select-sm bg-transparent" aria-label="กลุ่มหอ"></select></span>
     <div class="join" id="lvlSeg" role="group" aria-label="ระดับ QC">
       <button type="button" class="btn btn-sm join-item gap-1" data-level="L1" aria-pressed="false"><span class="legend-dot" style="background:var(--l1)"></span>L1</button>
@@ -70,7 +72,7 @@
       <p class="mt-2 text-xl font-extrabold leading-snug sm:text-2xl" id="heroText"><span class="skeleton-glass inline-block h-7 w-2/3"></span></p>
     </div>
     <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" id="kpis" aria-label="ตัวชี้วัดหลัก"></div>
-    <div class="grid gap-4 lg:grid-cols-5">
+    <div class="grid gap-4 lg:grid-cols-5" id="insightRow">
       <div class="glass reveal p-5 lg:col-span-3">
         <h3 class="mb-3 flex items-center gap-2 font-bold"><i data-i="lightbulb"></i> ข้อสังเกตอัตโนมัติ</h3>
         <div class="grid gap-2" id="insights"></div>
@@ -110,7 +112,7 @@
       <p class="mt-1 text-sm opacity-75" id="sub2"></p>
     </div>
     <div class="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
-      <div class="grid content-start gap-2">
+      <div class="grid content-start gap-2" id="picker-side">
         <label class="input input-bordered input-sm flex items-center gap-2 bg-transparent"><i data-i="search"></i><input type="search" id="wardSearch" class="grow" placeholder="ค้นหาหอผู้ป่วย / เครื่อง" aria-label="ค้นหาหอผู้ป่วย"></label>
         <div class="flex flex-wrap gap-1">
           <button class="btn btn-xs gap-1" type="button" id="btnTopFail"><i data-i="flame"></i> ไม่ผ่านบ่อยสุด</button>
