@@ -73,3 +73,10 @@ Vercel → Project → **Settings > Environment Variables** (เลือก Pro
 - Apps Script ปฏิเสธทุกคำขอที่ไม่มี `API_KEY` ที่ถูกต้อง (ทั้งอ่านและเขียน) · `/api/admin` ตรวจรหัสผ่านแบบ timing-safe และหน่วง 0.8 วินาทีเมื่อรหัสผิด
 - Dashboard เปิดอ่านได้สำหรับทุกคนที่มีลิงก์เว็บ (ข้อมูลเป็นค่า QC รายหอ ไม่มีข้อมูลผู้ป่วย) ถ้าต้องจำกัด ให้เปิด Vercel Authentication / Password Protection ที่ตัวโปรเจกต์
 - รัน/ดูตัวอย่างในเครื่อง: เปิดไฟล์โดยตั้ง `API_BASE: ""` จะแสดงข้อมูลสำรองจาก `data/seed.json` (บันทึกข้อมูลไม่ได้)
+
+
+## ND (Not Done)
+ช่องที่ไม่ได้ทำ QC ให้ใส่ `ND` ในคอลัมน์ note ของชีต Data (หรือติ๊ก ND ในหน้า Admin) – ND **ไม่นำมาคำนวณ** ร้อยละที่ผ่านเกณฑ์/ตัวหาร แต่นับว่า “บันทึกแล้ว” และแสดงเป็น ND ใน heatmap
+
+## แก้ UI (Tailwind + daisyUI + Lucide)
+ไฟล์ที่ build แล้ว (`css/tw.css`, `img/icons.svg`) ถูก commit ไว้ Vercel ไม่ต้อง build. แก้สไตล์/ไอคอนแล้วรัน `cd tools/ui && npm install && npm run build`

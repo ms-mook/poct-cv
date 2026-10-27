@@ -1,11 +1,12 @@
-/* Dashboard: bar (pass rate by month) · line (%CV by ward) · detail matrix + ward dialog */
+/* Executive dashboard: summary/insights · bar (pass rate) · line (%CV by ward) · heatmap + ward dialog
+   ND (Not Done) rows are never used in calculations; they count as "recorded" for completeness only. */
 (function () {
-  const { monthLabel, fiscalMonths, fmt, passOf, esc, css } = CV;
+  const { monthLabel, fiscalMonths, passOf, esc, css, icon, isND, WATCH_RATIO } = CV;
   const $ = (s) => document.querySelector(s);
-  const LEVEL_NAME = { L1: 'L1', L2: 'L2', ALL: 'ผ่านทั้ง L1 และ L2' };
   const MAX_SEL = 8;
+  const NULLROW = { l1: null, l2: null };
 
-  const S = { data: null, fy: null, level: 'ALL', selected: [], mean: true, byDev: new Map(), charts: {} };
+  const S = { data: null, fy: null, level: 'ALL', selected: [], mean: true, cmp: false, byDev: new Map(), charts: {} };
 
   /* ------------------------------------------------------------ derived data */
   function index() {
@@ -15,48 +16,58 @@
       S.byDev.get(r.device).set(r.month, r);
     }
   }
-  function monthsShown() {
-    const have = new Set(S.data.rows.map((r) => r.month));
-    if (S.fy === 'all') return [...have].sort();
-    return fiscalMonths(S.fy).filter((m) => have.has(m));
-  }
-  const rowOf = (dev, m) => S.byDev.get(dev)?.get(m) || null;
   const thr = () => S.data.threshold;
-  const hasValue = (r) => r && (r.l1 !== null || r.l2 !== null);
+  const watchAt = () => thr() * WATCH_RATIO;
+  const rowOf = (dev, m) => S.byDev.get(dev)?.get(m) || null;
+  const hasValue = (r) => !!r && (r.l1 !== null || r.l2 !== null);
+  const vals = (r, lv) => !r ? [] : (lv === 'L1' ? [r.l1] : lv === 'L2' ? [r.l2] : [r.l1, r.l2]).filter((v) => v !== null);
+  const shortWard = (w) => w.ward.replace(/^หอผู้ป่วย/, '').trim() || w.ward;
+  const wardByDev = (d) => S.data.wards.find((w) => w.device === d);
+
+  function monthsOf(fy) {
+    const have = new Set(S.data.rows.map((r) => r.month));
+    if (fy === 'all') return [...have].sort();
+    return fiscalMonths(fy).filter((m) => have.has(m));
+  }
+  const monthsShown = () => monthsOf(S.fy);
 
   function monthStat(m, level) {
     let n = 0, p = 0;
     for (const w of S.data.wards) {
-      const ok = passOf(rowOf(w.device, m) || { l1: null, l2: null }, level, thr());
+      const ok = passOf(rowOf(w.device, m) || NULLROW, level, thr());
       if (ok === null) continue;
       n++; if (ok) p++;
     }
     return { n, p, pct: n ? (p / n) * 100 : null };
   }
   function wardStats(dev, months, level) {
-    let fails = 0, max = null;
+    let fails = 0, max = null, n = 0, watch = 0;
     for (const m of months) {
       const r = rowOf(dev, m); if (!r) continue;
-      if (passOf(r, level, thr()) === false) fails++;
-      const vs = level === 'L1' ? [r.l1] : level === 'L2' ? [r.l2] : [r.l1, r.l2];
-      for (const v of vs) if (v !== null && (max === null || v > max)) max = v;
+      const ok = passOf(r, level, thr());
+      if (ok === null) continue;
+      n++; if (ok === false) fails++;
+      for (const v of vals(r, level)) { if (max === null || v > max) max = v; if (v < thr() && v >= watchAt()) watch++; }
     }
-    return { fails, max };
+    return { fails, max, n, watch };
   }
+  const fmt1 = (v) => (v === null || v === undefined ? '–' : v.toFixed(1));
 
   /* ------------------------------------------------------------ chart plumbing */
   function baseOptions() {
     const ink2 = css('--ink-2'), grid = css('--grid');
     return {
-      responsive: true, maintainAspectRatio: false, animation: { duration: 350 },
+      responsive: true, maintainAspectRatio: false, animation: { duration: 450 },
       interaction: { mode: 'index', intersect: false },
       font: { family: getComputedStyle(document.body).fontFamily },
       scales: {
         x: { grid: { display: false }, ticks: { color: ink2 }, border: { color: css('--line') } },
         y: { beginAtZero: true, grid: { color: grid }, ticks: { color: ink2 }, border: { display: false } }
       },
-      plugins: { legend: { labels: { color: css('--ink'), usePointStyle: true, boxWidth: 8, boxHeight: 8, padding: 16 } },
-        tooltip: { backgroundColor: css('--ink'), titleColor: css('--bg'), bodyColor: css('--bg'), padding: 10, cornerRadius: 8, boxPadding: 4 } }
+      plugins: {
+        legend: { labels: { color: css('--ink'), usePointStyle: true, boxWidth: 8, boxHeight: 8, padding: 16 } },
+        tooltip: { backgroundColor: css('--ink'), titleColor: css('--page-bg'), bodyColor: css('--page-bg'), padding: 10, cornerRadius: 10, boxPadding: 4 }
+      }
     };
   }
   function draw(key, canvas, config) {
@@ -67,7 +78,7 @@
     id: 'valueLabels',
     afterDatasetsDraw(chart) {
       const { ctx } = chart; ctx.save();
-      ctx.font = `600 11px ${getComputedStyle(document.body).fontFamily}`; ctx.fillStyle = css('--ink'); ctx.textAlign = 'center';
+      ctx.font = `700 11px ${getComputedStyle(document.body).fontFamily}`; ctx.fillStyle = css('--ink'); ctx.textAlign = 'center';
       chart.data.datasets.forEach((ds, i) => {
         if (!ds.showLabels) return;
         chart.getDatasetMeta(i).data.forEach((bar, j) => {
@@ -88,32 +99,189 @@
     }
   };
 
+  /* ------------------------------------------------------------ executive summary */
+  function spark(values) {
+    const v = values.filter((x) => x !== null);
+    if (v.length < 2) return '';
+    const W = 120, H = 44, pad = 5, lo = Math.max(0, Math.min(...v) - 8), hi = 100;
+    const X = (i) => pad + (i * (W - 2 * pad)) / (v.length - 1);
+    const Y = (x) => H - pad - ((x - lo) / (hi - lo || 1)) * (H - 2 * pad);
+    const pts = v.map((x, i) => [X(i), Y(x)]);
+    const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+    const last = pts[pts.length - 1];
+    return `<svg class="spark" viewBox="0 0 ${W} ${H}" role="img" aria-label="แนวโน้มร้อยละที่ผ่านเกณฑ์"><path class="area" d="${d} L${last[0]} ${H} L${pts[0][0]} ${H} Z"/><path class="line" d="${d}"/><circle cx="${last[0]}" cy="${last[1]}" r="3.5"/></svg>`;
+  }
+  function deltaBadge(d, unit, goodUp = true) {
+    if (d === null || d === undefined || isNaN(d)) return '';
+    const rounded = Math.round(d * 10) / 10;
+    if (rounded === 0) return `<span class="delta flat">${icon('minus')} คงที่</span>`;
+    const up = rounded > 0, good = up === goodUp;
+    return `<span class="delta ${good ? 'up' : 'down'}">${icon(up ? 'trending-up' : 'trending-down')} ${up ? '+' : ''}${rounded.toFixed(1)}${unit}</span>`;
+  }
+
+  function analyse() {
+    const months = monthsShown(); if (!months.length) return null;
+    const lv = S.level, t = thr();
+    const last = months[months.length - 1];
+    const lastStat = monthStat(last, lv);
+    const idx = months.indexOf(last);
+    let prev = null, prevStat = null;
+    for (let i = idx - 1; i >= 0; i--) { const s = monthStat(months[i], lv); if (s.n) { prev = months[i]; prevStat = s; break; } }
+    const pcts = months.map((m) => monthStat(m, lv).pct);
+    const active = S.data.wards.filter((w) => w.active);
+    const failing = [], watch = [], repeat = [];
+    let recorded = 0, nd = 0; const missing = [];
+    for (const w of S.data.wards) {
+      const r = rowOf(w.device, last);
+      if (w.active) {
+        if (r) { recorded++; if (isND(r)) nd++; } else missing.push(w);
+      }
+      const ok = passOf(r || NULLROW, lv, t);
+      if (ok === false) failing.push(w);
+      else if (ok === true && Math.max(...vals(r, lv)) >= watchAt()) watch.push({ w, max: Math.max(...vals(r, lv)) });
+      // consecutive failing streak ending at the latest month (months without a result are skipped, a pass ends it)
+      let streak = 0;
+      for (let i = months.length - 1; i >= 0; i--) {
+        const o = passOf(rowOf(w.device, months[i]) || NULLROW, lv, t);
+        if (o === null) continue;
+        if (o === false) streak++; else break;
+      }
+      if (streak >= 2) repeat.push({ w, streak });
+    }
+    // wards that passed every evaluated month in the period
+    let perfect = 0, evaluated = 0;
+    for (const w of S.data.wards) {
+      const st = wardStats(w.device, months, lv);
+      if (st.n >= 1) { evaluated++; if (st.fails === 0) perfect++; }
+    }
+    const valid = pcts.filter((v) => v !== null);
+    const avg = valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : null;
+    // previous fiscal year average (same level)
+    let prevFyAvg = null;
+    if (S.fy !== 'all') {
+      const pm = monthsOf(S.fy - 1).map((m) => monthStat(m, lv).pct).filter((v) => v !== null);
+      if (pm.length) prevFyAvg = pm.reduce((a, b) => a + b, 0) / pm.length;
+    }
+    // level comparison over period
+    const avgOf = (k) => { const a = months.map((m) => monthStat(m, k).pct).filter((v) => v !== null); return a.length ? a.reduce((x, y) => x + y, 0) / a.length : null; };
+    return { months, last, lastStat, prev, prevStat, pcts, failing, watch, repeat, missing, recorded, nd, active: active.length, perfect, evaluated, avg, prevFyAvg, l1: avgOf('L1'), l2: avgOf('L2') };
+  }
+
+  const LV_TXT = () => (S.level === 'ALL' ? 'ผ่านทั้ง L1 และ L2' : S.level);
+  const periodTxt = () => (S.fy === 'all' ? 'ทุกปีงบประมาณ' : `ปีงบประมาณ ${S.fy}`);
+
+  function renderSummary() {
+    const A = analyse(); const kpis = $('#kpis');
+    if (!A) {
+      $('#heroText').textContent = 'ยังไม่มีข้อมูลในช่วงที่เลือก';
+      kpis.innerHTML = ''; $('#insights').innerHTML = ''; $('#watchlist').innerHTML = '';
+      return;
+    }
+    const { lastStat: s, prevStat: ps } = A;
+    const pct = s.pct;
+    const tone = pct === null ? 'info' : pct >= 95 ? 'good' : pct >= 85 ? 'warn' : 'bad';
+    const toneTxt = { good: 'อยู่ในเกณฑ์ดี', warn: 'ควรติดตาม', bad: 'ต้องเร่งแก้ไข', info: '' }[tone];
+    $('#heroPeriod').textContent = `· ${periodTxt()} · ${LV_TXT()}`;
+    $('#heroText').innerHTML = pct === null
+      ? `${monthLabel(A.last, true)}: ยังไม่มีผลที่นำมาคำนวณ`
+      : `${monthLabel(A.last, true)} มี <span style="color:var(--${tone === 'good' ? 'ok' : tone === 'warn' ? 'warn' : 'bad'})">${pct.toFixed(1)}%</span> ของเครื่องผ่านเกณฑ์ (${s.p}/${s.n} เครื่อง) – ${toneTxt}`
+        + (A.failing.length ? ` · ไม่ผ่าน ${A.failing.length} เครื่อง` : '');
+
+    const dPct = pct !== null && ps && ps.pct !== null ? pct - ps.pct : null;
+    const compl = A.active ? (A.recorded / A.active) * 100 : null;
+    kpis.innerHTML = `
+      <div class="glass lift reveal p-4"><div class="flex items-center justify-between text-sm font-semibold opacity-80"><span>ร้อยละที่ผ่านเกณฑ์</span>${icon('gauge', 'icon-lg')}</div>
+        <div class="mt-1 flex items-end justify-between gap-2"><div class="kpi-value"><span data-count="${pct ?? ''}" data-dec="1">${fmt1(pct)}</span>${pct === null ? '' : '<span class="text-xl">%</span>'}</div>${spark(A.pcts)}</div>
+        <div class="mt-1 flex flex-wrap items-center gap-2 text-xs"><span>${monthLabel(A.last)} · ผ่าน ${s.p}/${s.n}</span>${deltaBadge(dPct, ' จุด')}</div></div>
+      <div class="glass lift reveal p-4" style="--d:60ms"><div class="flex items-center justify-between text-sm font-semibold opacity-80"><span>เครื่องที่ไม่ผ่านเดือนล่าสุด</span>${icon('triangle-alert', 'icon-lg')}</div>
+        <div class="kpi-value mt-1" style="color:${A.failing.length ? 'var(--bad)' : 'var(--ok)'}"><span data-count="${A.failing.length}" data-dec="0">${A.failing.length}</span> <span class="text-base font-semibold">เครื่อง</span></div>
+        <div class="mt-1 text-xs">${A.failing.length ? esc(A.failing.slice(0, 3).map(shortWard).join(', ')) + (A.failing.length > 3 ? ` และอีก ${A.failing.length - 3}` : '') : `${icon('circle-check')} ผ่านทุกเครื่องที่ทำ QC`}</div></div>
+      <div class="glass lift reveal p-4" style="--d:120ms"><div class="flex items-center justify-between text-sm font-semibold opacity-80"><span>ต้องเฝ้าระวัง</span>${icon('eye', 'icon-lg')}</div>
+        <div class="kpi-value mt-1" style="color:${A.repeat.length ? 'var(--bad)' : A.watch.length ? 'var(--warn)' : 'var(--ok)'}"><span data-count="${A.repeat.length + A.watch.length}" data-dec="0">${A.repeat.length + A.watch.length}</span> <span class="text-base font-semibold">เครื่อง</span></div>
+        <div class="mt-1 text-xs">ไม่ผ่านต่อเนื่อง ${A.repeat.length} · ใกล้เกณฑ์ ${A.watch.length}</div></div>
+      <div class="glass lift reveal p-4" style="--d:180ms"><div class="flex items-center justify-between text-sm font-semibold opacity-80"><span>ความครบถ้วนของข้อมูล</span>${icon('clipboard-check', 'icon-lg')}</div>
+        <div class="kpi-value mt-1" style="color:${A.missing.length ? 'var(--warn)' : 'var(--ok)'}"><span data-count="${compl ?? ''}" data-dec="0">${compl === null ? '–' : Math.round(compl)}</span><span class="text-xl">%</span></div>
+        <div class="mt-1 text-xs">บันทึกแล้ว ${A.recorded}/${A.active} หอ${A.nd ? ` · ND ${A.nd}` : ''}${A.missing.length ? ` · ยังไม่บันทึก ${A.missing.length}` : ''}</div></div>`;
+    kpis.querySelectorAll('[data-count]').forEach((el) => { const v = parseFloat(el.dataset.count); if (!isNaN(v)) countUp(el, v, +el.dataset.dec); });
+
+    /* insights */
+    const ins = [];
+    const add = (cls, ic, html) => ins.push(`<div class="insight ${cls} fade-in"><span class="ic">${icon(ic)}</span><div class="text-sm leading-snug">${html}</div></div>`);
+    if (dPct !== null) {
+      const r = Math.round(dPct * 10) / 10;
+      add(r > 0 ? 'good' : r < 0 ? 'bad' : 'info', r > 0 ? 'trending-up' : r < 0 ? 'trending-down' : 'minus',
+        r === 0 ? `ร้อยละผ่านเกณฑ์<b>คงที่</b>เมื่อเทียบกับ ${monthLabel(A.prev)}` : `ร้อยละผ่านเกณฑ์<b>${r > 0 ? 'เพิ่มขึ้น' : 'ลดลง'} ${Math.abs(r).toFixed(1)} จุด</b> เมื่อเทียบกับ ${monthLabel(A.prev)} (${ps.pct.toFixed(1)}% → ${pct.toFixed(1)}%)`);
+    }
+    if (A.failing.length === 0 && s.n) add('good', 'circle-check', `เดือน ${monthLabel(A.last)} <b>ผ่านเกณฑ์ทุกเครื่อง</b> ที่ทำ QC (${s.n} เครื่อง)`);
+    else if (A.failing.length) add('bad', 'siren', `<b>${A.failing.length} เครื่องไม่ผ่านเกณฑ์</b> ใน ${monthLabel(A.last)}: ${esc(A.failing.map(shortWard).join(', '))}`);
+    if (A.repeat.length) add('bad', 'triangle-alert', `<b>${A.repeat.length} เครื่องไม่ผ่านต่อเนื่อง ≥ 2 เดือน</b> ควรตรวจสอบสาเหตุเชิงระบบ (เครื่อง/สารควบคุม/ผู้ใช้): ${esc(A.repeat.slice(0, 4).map((x) => shortWard(x.w) + ` (${x.streak} เดือน)`).join(', '))}${A.repeat.length > 4 ? '…' : ''}`);
+    if (A.watch.length) add('warn', 'scan-eye', `<b>${A.watch.length} เครื่องผ่านแต่ใกล้เกณฑ์</b> (%CV ≥ ${watchAt().toFixed(2)}) อาจไม่ผ่านในเดือนถัดไป: ${esc(A.watch.slice(0, 4).map((x) => shortWard(x.w)).join(', '))}${A.watch.length > 4 ? '…' : ''}`);
+    if (A.missing.length) add('warn', 'hourglass', `<b>ยังไม่มีข้อมูล ${monthLabel(A.last)} ของ ${A.missing.length} หอ</b> (หอที่เปิดใช้งาน): ${esc(A.missing.slice(0, 4).map(shortWard).join(', '))}${A.missing.length > 4 ? '…' : ''}`);
+    if (A.nd) add('info', 'ban', `ND (ไม่ได้ทำ) ${A.nd} หอใน ${monthLabel(A.last)} – <b>ไม่นำมาคำนวณ</b>ร้อยละที่ผ่านเกณฑ์`);
+    if (A.evaluated) add('good', 'trophy', `<b>${A.perfect} จาก ${A.evaluated} เครื่อง</b> (${((A.perfect / A.evaluated) * 100).toFixed(0)}%) ผ่านเกณฑ์ทุกเดือนใน${periodTxt()}`);
+    if (S.level === 'ALL' && A.l1 !== null && A.l2 !== null && Math.abs(A.l1 - A.l2) >= 1)
+      add('info', 'git-compare', `ตลอด${periodTxt()} <b>${A.l1 < A.l2 ? 'L1' : 'L2'} ไม่ผ่านบ่อยกว่า</b> (เฉลี่ยผ่าน L1 ${A.l1.toFixed(1)}% · L2 ${A.l2.toFixed(1)}%)`);
+    if (A.prevFyAvg !== null && A.avg !== null) {
+      const d = A.avg - A.prevFyAvg;
+      add(d >= 0 ? 'good' : 'bad', d >= 0 ? 'arrow-up-right' : 'arrow-down-right', `ค่าเฉลี่ยร้อยละผ่านเกณฑ์ปีงบ ${S.fy} = <b>${A.avg.toFixed(1)}%</b> ${d >= 0 ? 'สูงกว่า' : 'ต่ำกว่า'}ปีงบ ${S.fy - 1} (${A.prevFyAvg.toFixed(1)}%) อยู่ ${Math.abs(d).toFixed(1)} จุด`);
+    } else if (A.avg !== null) add('info', 'info', `ค่าเฉลี่ยร้อยละผ่านเกณฑ์ ${periodTxt()} = <b>${A.avg.toFixed(1)}%</b> (${A.months.length} เดือน)`);
+    $('#insights').innerHTML = ins.join('');
+
+    /* watchlist */
+    const items = [];
+    const seen = new Set();
+    for (const f of A.failing) { const rp = A.repeat.find((x) => x.w.device === f.device); seen.add(f.device); items.push({ w: f, tag: rp ? `ไม่ผ่านต่อเนื่อง ${rp.streak} เดือน` : 'ไม่ผ่านเดือนล่าสุด', cls: 'badge-error', score: 100 + (rp?.streak || 0) }); }
+    for (const x of A.repeat) if (!seen.has(x.w.device)) { seen.add(x.w.device); items.push({ w: x.w, tag: `ไม่ผ่านต่อเนื่อง ${x.streak} เดือน`, cls: 'badge-error', score: 50 + x.streak }); }
+    for (const x of A.watch) if (!seen.has(x.w.device)) items.push({ w: x.w, tag: 'ใกล้เกณฑ์', cls: 'badge-warning', score: x.max });
+    items.sort((a, b) => b.score - a.score);
+    $('#watchlist').innerHTML = items.length ? items.slice(0, 8).map((it) => {
+      const r = rowOf(it.w.device, A.last); const v = vals(r, S.level);
+      return `<button type="button" class="lift flex w-full items-center gap-3 rounded-xl border border-[var(--line)] px-3 py-2 text-left" data-open="${esc(it.w.device)}">
+        <span class="min-w-0 flex-1"><span class="block truncate text-sm font-bold">${esc(shortWard(it.w))}</span><span class="dev">${esc(it.w.device)}${v.length ? ' · %CV ' + v.map((x) => x.toFixed(2)).join(' / ') : ''}</span></span>
+        <span class="badge badge-sm ${it.cls}">${it.tag}</span>${icon('chevron-right')}</button>`;
+    }).join('') + (items.length > 8 ? `<div class="text-center text-xs opacity-70">และอีก ${items.length - 8} เครื่อง – ดูทั้งหมดในหัวข้อ 3</div>` : '')
+      : `<div class="insight good"><span class="ic">${icon('shield-check')}</span><div class="text-sm">ไม่มีหอผู้ป่วยที่ต้องเฝ้าระวังในเดือนล่าสุด</div></div>`;
+    initReveal();
+  }
+
   /* ------------------------------------------------------------ 1. bar chart */
   function renderBar() {
-    const months = monthsShown();
+    const months = monthsShown(); const lv = S.level;
     const labels = months.map((m) => monthLabel(m));
-    const lv = S.level;
     const defs = lv === 'ALL'
       ? [{ k: 'L1', name: 'L1', color: css('--l1') }, { k: 'L2', name: 'L2', color: css('--l2') }, { k: 'ALL', name: 'ผ่านทั้ง L1 และ L2', color: css('--all') }]
       : [{ k: lv, name: lv, color: css(lv === 'L1' ? '--l1' : '--l2') }];
     const stats = defs.map((d) => months.map((m) => monthStat(m, d.k)));
-    const labelIdx = defs.length === 1 ? 0 : 2;
     const datasets = defs.map((d, i) => ({
-      label: d.name, data: stats[i].map((s) => s.pct), backgroundColor: d.color, borderRadius: { topLeft: 4, topRight: 4 },
+      label: d.name, data: stats[i].map((s) => s.pct), backgroundColor: d.color, borderRadius: { topLeft: 6, topRight: 6 },
       borderSkipped: 'bottom', maxBarThickness: defs.length === 1 ? 44 : 24, categoryPercentage: .82, barPercentage: .92,
-      showLabels: defs.length === 1 && i === labelIdx && months.length <= 13
+      showLabels: defs.length === 1 && months.length <= 13, order: 2
     }));
+    // previous fiscal year overlay (same calendar months)
+    let prevStats = null;
+    const canCmp = S.fy !== 'all' && monthsOf(S.fy - 1).length > 0;
+    $('#chkCmp').disabled = !canCmp;
+    if (S.cmp && canCmp) {
+      const cur = fiscalMonths(S.fy), old = fiscalMonths(S.fy - 1);
+      const key = lv === 'ALL' ? 'ALL' : lv;
+      prevStats = months.map((m) => { const i = cur.indexOf(m); return monthStat(old[i], key); });
+      datasets.push({
+        type: 'line', label: `ปีงบ ${S.fy - 1} (${lv === 'ALL' ? 'ผ่านทั้งคู่' : lv})`, data: prevStats.map((s) => s.pct), borderColor: css('--prev'), backgroundColor: css('--prev'),
+        borderDash: [6, 4], borderWidth: 2.5, pointRadius: 3.5, pointStyle: 'rectRot', tension: .15, order: 0, spanGaps: false
+      });
+    }
     const opt = baseOptions();
     opt.scales.y.max = 112; opt.scales.y.ticks.callback = (v) => (v <= 100 ? v + '%' : '');
     opt.scales.y.title = { display: true, text: 'ร้อยละที่ผ่านเกณฑ์', color: css('--ink-2') };
-    opt.plugins.legend.display = defs.length > 1;
+    opt.plugins.legend.display = datasets.length > 1;
     opt.plugins.tooltip.callbacks = {
-      label: (c) => { const s = stats[c.datasetIndex][c.dataIndex]; return s.n ? ` ${c.dataset.label}: ${s.pct.toFixed(1)}% (ผ่าน ${s.p}/${s.n} เครื่อง)` : ` ${c.dataset.label}: ไม่มีข้อมูล`; }
+      label: (c) => {
+        const s = c.dataset.type === 'line' ? prevStats[c.dataIndex] : stats[c.datasetIndex][c.dataIndex];
+        return s.n ? ` ${c.dataset.label}: ${s.pct.toFixed(1)}% (ผ่าน ${s.p}/${s.n} เครื่อง)` : ` ${c.dataset.label}: ไม่มีข้อมูล`;
+      }
     };
     draw('bar', $('#barChart'), { type: 'bar', data: { labels, datasets }, options: opt, plugins: [valueLabels] });
-
-    $('#sub1').textContent = `เกณฑ์ผ่าน: %CV < ${thr()}% · ` + (lv === 'ALL' ? 'แท่งสีม่วง = เครื่องที่ผ่านทั้ง L1 และ L2 พร้อมกัน' : `เฉพาะ ${lv}`);
-    // accessible table twin
+    $('#sub1').textContent = `เกณฑ์ผ่าน: %CV < ${thr()}% · ` + (lv === 'ALL' ? 'แท่งสีม่วง = เครื่องที่ผ่านทั้ง L1 และ L2 พร้อมกัน' : `เฉพาะ ${lv}`) + ' · ND ไม่นำมาคำนวณ';
     let h = '<thead><tr><th>เดือน</th>' + defs.map((d) => `<th>${esc(d.name)} ผ่าน/ทั้งหมด</th><th>${esc(d.name)} %</th>`).join('') + '</tr></thead><tbody>';
     months.forEach((m, j) => {
       h += `<tr><td>${monthLabel(m, true)}</td>` + defs.map((d, i) => { const s = stats[i][j]; return `<td>${s.n ? `${s.p}/${s.n}` : '–'}</td><td>${s.n ? s.pct.toFixed(1) : '–'}</td>`; }).join('') + '</tr>';
@@ -121,36 +289,21 @@
     $('#barTable').innerHTML = h + '</tbody>';
   }
 
-  /* ------------------------------------------------------------ KPIs */
-  function renderKpis() {
-    const months = monthsShown(); const box = $('#kpis');
-    if (!months.length) { box.innerHTML = ''; return; }
-    const last = months[months.length - 1], s = monthStat(last, S.level);
-    const failing = S.data.wards.filter((w) => passOf(rowOf(w.device, last) || { l1: null, l2: null }, S.level, thr()) === false);
-    const pcts = months.map((m) => monthStat(m, S.level).pct).filter((v) => v !== null);
-    const avg = pcts.length ? pcts.reduce((a, b) => a + b, 0) / pcts.length : null;
-    const names = failing.slice(0, 3).map((w) => w.ward.replace('หอผู้ป่วย', '').trim()).join(', ');
-    box.innerHTML = `
-      <div class="kpi"><div class="k">ร้อยละที่ผ่านเกณฑ์ · ${monthLabel(last, true)}</div><div class="v">${s.pct === null ? '–' : s.pct.toFixed(1) + '%'}</div><div class="d">ผ่าน ${s.p} จาก ${s.n} เครื่อง</div></div>
-      <div class="kpi ${failing.length ? 'bad' : ''}"><div class="k">เครื่องที่ไม่ผ่านเดือนล่าสุด</div><div class="v">${failing.length} <span style="font-size:15px;font-weight:500">เครื่อง</span></div><div class="d">${failing.length ? esc(names) + (failing.length > 3 ? ` และอีก ${failing.length - 3}` : '') : 'ผ่านทุกเครื่อง'}</div></div>
-      <div class="kpi"><div class="k">ค่าเฉลี่ยร้อยละที่ผ่าน (${S.fy === 'all' ? 'ทุกเดือน' : 'ปีงบ ' + S.fy})</div><div class="v">${avg === null ? '–' : avg.toFixed(1) + '%'}</div><div class="d">${months.length} เดือนที่มีข้อมูล</div></div>`;
-  }
-
   /* ------------------------------------------------------------ 2. line chart + picker */
   const wardColor = (i) => css('--s' + ((i % 8) + 1));
   function renderPicker() {
     const q = $('#wardSearch').value.trim().toLowerCase();
-    const list = $('#wardList');
     const full = S.selected.length >= MAX_SEL;
     const ordered = [...S.data.wards].sort((a, b) => {
       const ia = S.selected.indexOf(a.device), ib = S.selected.indexOf(b.device);
       return (ia < 0) - (ib < 0) || (ia >= 0 ? ia - ib : a.no - b.no);
     });
-    list.innerHTML = ordered.filter((w) => !q || (w.ward + ' ' + w.device).toLowerCase().includes(q)).map((w) => {
+    $('#wardList').innerHTML = ordered.filter((w) => !q || (w.ward + ' ' + w.device).toLowerCase().includes(q)).map((w) => {
       const idx = S.selected.indexOf(w.device), on = idx >= 0;
-      return `<label class="${!on && full ? 'off' : ''}"><input type="checkbox" value="${esc(w.device)}" ${on ? 'checked' : ''} ${!on && full ? 'disabled' : ''}>
+      return `<label class="${!on && full ? 'off' : ''}"><input type="checkbox" class="checkbox checkbox-xs checkbox-primary" value="${esc(w.device)}" ${on ? 'checked' : ''} ${!on && full ? 'disabled' : ''}>
         <span class="sw" style="background:${on ? wardColor(idx) : 'var(--line)'}"></span><span>${esc(w.ward)}<br><span class="dev">${esc(w.device)}</span></span></label>`;
-    }).join('') || '<div class="empty" style="padding:16px">ไม่พบหอผู้ป่วย</div>';
+    }).join('') || '<div class="p-4 text-center text-sm opacity-70">ไม่พบหอผู้ป่วย</div>';
+    $('#chips').innerHTML = S.selected.map((d, i) => `<span class="chip"><span class="sw" style="background:${wardColor(i)}"></span>${esc(shortWard(wardByDev(d) || { ward: d }))}<button type="button" data-rm="${esc(d)}" aria-label="เอาออก">${icon('x')}</button></span>`).join('');
     $('#pickHint').textContent = `เลือกแล้ว ${S.selected.length}/${MAX_SEL} หอ` + (full ? ' · ยกเลิกบางหอเพื่อเลือกเพิ่ม' : '');
   }
   function topFailing(n) {
@@ -160,11 +313,10 @@
   }
   function renderLine() {
     const months = monthsShown(); const labels = months.map((m) => monthLabel(m)); const lv = S.level;
-    const wardName = (d) => S.data.wards.find((w) => w.device === d)?.ward || d;
     const ds = [];
     const series = (label, get, color, dash, extra = {}) => ds.push({
       label, data: months.map(get), borderColor: color, backgroundColor: color, borderWidth: 2, pointRadius: 3.5, pointHoverRadius: 6,
-      pointBorderColor: css('--surface'), pointBorderWidth: 2, borderDash: dash, spanGaps: false, tension: 0.15, ...extra
+      pointBorderColor: css('--solid'), pointBorderWidth: 2, borderDash: dash, spanGaps: false, tension: 0.15, ...extra
     });
     if (S.mean) {
       const avg = (k) => (m) => { const v = S.data.wards.map((w) => rowOf(w.device, m)?.[k]).filter((x) => x !== null && x !== undefined); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
@@ -173,25 +325,23 @@
       if (lv !== 'L1') series(lv === 'ALL' ? 'เฉลี่ยทุกหอ · L2' : 'เฉลี่ยทุกหอ', avg('l2'), mc, [6, 4], { borderWidth: 3, pointRadius: 0, pointHoverRadius: 4 });
     }
     S.selected.forEach((d, i) => {
-      const c = wardColor(i), nm = wardName(d);
+      const c = wardColor(i), nm = shortWard(wardByDev(d) || { ward: d });
       if (lv !== 'L2') series(lv === 'ALL' ? `${nm} · L1` : nm, (m) => rowOf(d, m)?.l1 ?? null, c, []);
       if (lv !== 'L1') series(lv === 'ALL' ? `${nm} · L2` : nm, (m) => rowOf(d, m)?.l2 ?? null, c, lv === 'ALL' ? [6, 4] : [], lv === 'ALL' ? { pointStyle: 'rectRot' } : {});
     });
     ds.push({ label: `เกณฑ์ผ่าน < ${thr()}%`, data: months.map(() => thr()), borderColor: css('--bad'), borderDash: [2, 4], borderWidth: 2, pointRadius: 0, pointHoverRadius: 0, fill: false });
-
     const opt = baseOptions();
     opt.scales.y.suggestedMax = Math.max(thr() * 1.5, 10);
     opt.scales.y.title = { display: true, text: '%CV', color: css('--ink-2') };
-    opt.plugins.legend.labels.filter = () => true;
     opt.plugins.tooltip.itemSort = (a, b) => (b.raw ?? -1) - (a.raw ?? -1);
     opt.plugins.tooltip.callbacks = {
       label: (c) => c.raw === null || c.raw === undefined ? null : c.dataset.label.startsWith('เกณฑ์') ? ` ${c.dataset.label}` : ` ${c.dataset.label}: ${c.raw.toFixed(2)}%${c.raw >= thr() ? '  ▲ ไม่ผ่าน' : ''}`
     };
     draw('line', $('#lineChart'), { type: 'line', data: { labels, datasets: ds }, options: opt, plugins: [crosshair] });
-    $('#sub2').textContent = lv === 'ALL' ? 'เส้นทึบ = L1 · เส้นประ = L2 · เส้นแดงประ = เกณฑ์ผ่าน' : `แสดง ${lv} · เส้นแดงประ = เกณฑ์ผ่าน (< ${thr()}%)`;
+    $('#sub2').textContent = (lv === 'ALL' ? 'เส้นทึบ = L1 · เส้นประ = L2 · ' : `แสดง ${lv} · `) + `เส้นแดงประ = เกณฑ์ผ่าน (< ${thr()}%) · เลือกได้สูงสุด ${MAX_SEL} หอ`;
   }
 
-  /* ------------------------------------------------------------ 3. matrix */
+  /* ------------------------------------------------------------ 3. heatmap matrix */
   function matrixRows() {
     const months = monthsShown(); const q = $('#tblSearch').value.trim().toLowerCase(); const onlyFail = $('#onlyFail').checked;
     let rows = S.data.wards.filter((w) => !q || (w.ward + ' ' + w.device).toLowerCase().includes(q))
@@ -201,110 +351,154 @@
     else if (sort === 'max') rows.sort((a, b) => (b.max ?? -1) - (a.max ?? -1));
     return { months, rows };
   }
+  const cls = (v) => (v >= thr() ? 'bad' : v >= watchAt() ? 'watch' : 'ok');
   function cell(r) {
-    const t = thr(), lv = S.level;
-    if (!hasValue(r)) return `<td class="na" ${r?.note ? `title="${esc(r.note)}"` : ''}>${r?.note ? '<span aria-label="' + esc(r.note) + '">–</span>' : '–'}</td>`;
-    const one = (v) => v === null ? '–' : `<span class="${v >= t ? 'fail fail-mark' : ''}">${v.toFixed(2)}</span>`;
-    const bad = passOf(r, lv, t) === false;
+    const lv = S.level;
+    if (!r) return '<td class="cell-none">–</td>';
+    if (isND(r)) return `<td class="cell-nd" title="ND = ไม่ได้ทำ (ไม่นำมาคำนวณ)">ND</td>`;
+    const vs = vals(r, lv);
+    if (!vs.length) return `<td class="cell-none" ${r.note ? `title="${esc(r.note)}"` : ''}>–</td>`;
+    const one = (v) => (v === null ? '–' : v.toFixed(2));
+    const worst = Math.max(...vs), c = cls(worst);
     const txt = lv === 'L1' ? one(r.l1) : lv === 'L2' ? one(r.l2) : `${one(r.l1)} / ${one(r.l2)}`;
-    return `<td class="${bad ? 'fail' : ''}">${txt}</td>`;
+    return `<td class="${c === 'bad' ? 'cell-bad mark-bad' : c === 'watch' ? 'cell-watch mark-watch' : ''}">${txt}</td>`;
   }
   function renderMatrix() {
     const { months, rows } = matrixRows();
-    let h = '<thead><tr><th class="sticky">หอผู้ป่วย</th>' + months.map((m) => `<th>${monthLabel(m)}</th>`).join('') + '<th>ไม่ผ่าน (ครั้ง)</th><th>สูงสุด</th></tr></thead><tbody>';
+    let h = '<thead><tr><th class="sticky-l">หอผู้ป่วย</th>' + months.map((m) => `<th>${monthLabel(m)}</th>`).join('') + '<th>ไม่ผ่าน (ครั้ง)</th><th>สูงสุด</th></tr></thead><tbody>';
     for (const { w, fails, max } of rows) {
-      h += `<tr tabindex="0" role="button" data-dev="${esc(w.device)}" aria-label="ดูรายละเอียด ${esc(w.ward)}"><td class="sticky"><b>${esc(w.ward)}</b><br><span class="dev">${esc(w.device)}</span></td>`
+      h += `<tr tabindex="0" role="button" data-dev="${esc(w.device)}" aria-label="ดูรายละเอียด ${esc(w.ward)}"><td class="sticky-l"><b>${esc(w.ward)}</b>${w.active ? '' : ' <span class="badge badge-ghost badge-xs">ปิดใช้งาน</span>'}<br><span class="dev">${esc(w.device)}</span></td>`
         + months.map((m) => cell(rowOf(w.device, m))).join('')
-        + `<td class="${fails ? 'fail' : ''}">${fails}</td><td>${max === null ? '–' : max.toFixed(2)}</td></tr>`;
+        + `<td class="${fails ? 'cell-bad' : ''}">${fails}</td><td>${max === null ? '–' : max.toFixed(2)}</td></tr>`;
     }
-    if (!rows.length) h += `<tr><td colspan="${months.length + 3}" class="empty">ไม่พบข้อมูลตามเงื่อนไข</td></tr>`;
+    if (!rows.length) h += `<tr><td colspan="${months.length + 3}" class="p-6 text-center opacity-70" style="text-align:center">ไม่พบข้อมูลตามเงื่อนไข</td></tr>`;
     $('#matrix').innerHTML = h + '</tbody>';
   }
   function downloadCsv() {
     const { months, rows } = matrixRows(); const lv = S.level;
     const head = ['หอผู้ป่วย', 'หมายเลขเครื่อง']; months.forEach((m) => { if (lv !== 'L2') head.push(`${monthLabel(m)} L1`); if (lv !== 'L1') head.push(`${monthLabel(m)} L2`); });
     const lines = [head];
-    rows.forEach(({ w }) => { const l = [w.ward, w.device]; months.forEach((m) => { const r = rowOf(w.device, m); if (lv !== 'L2') l.push(r?.l1 ?? ''); if (lv !== 'L1') l.push(r?.l2 ?? ''); }); lines.push(l); });
+    rows.forEach(({ w }) => {
+      const l = [w.ward, w.device];
+      months.forEach((m) => { const r = rowOf(w.device, m); const nd = isND(r); if (lv !== 'L2') l.push(nd ? 'ND' : r?.l1 ?? ''); if (lv !== 'L1') l.push(nd ? 'ND' : r?.l2 ?? ''); });
+      lines.push(l);
+    });
     const csv = '﻿' + lines.map((l) => l.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     a.download = `cv-${S.fy === 'all' ? 'all' : 'FY' + S.fy}-${lv}.csv`; a.click(); URL.revokeObjectURL(a.href);
+    toast('ดาวน์โหลด CSV แล้ว', 'success');
   }
 
   /* ------------------------------------------------------------ ward detail dialog */
   function openDetail(dev) {
-    const w = S.data.wards.find((x) => x.device === dev); if (!w) return;
+    const w = wardByDev(dev); if (!w) return;
     const months = monthsShown(), t = thr();
     $('#dTitle').textContent = w.ward;
-    $('#dSub').textContent = `เครื่อง ${w.device} · ${S.fy === 'all' ? 'ทุกปีงบประมาณ' : 'ปีงบประมาณ ' + S.fy} · เกณฑ์ผ่าน %CV < ${t}%`;
+    $('#dSub').textContent = `เครื่อง ${w.device} · ${periodTxt()} · เกณฑ์ผ่าน %CV < ${t}%`;
+    const st = wardStats(dev, months, 'ALL');
+    const lastR = [...months].reverse().map((m) => rowOf(dev, m)).find((r) => hasValue(r));
+    $('#dChips').innerHTML = `<span class="badge ${st.fails ? 'badge-error' : 'badge-success'} gap-1">${icon(st.fails ? 'triangle-alert' : 'circle-check')} ไม่ผ่าน ${st.fails}/${st.n} เดือน</span>
+      <span class="badge badge-ghost gap-1">${icon('arrow-up-right')} %CV สูงสุด ${st.max === null ? '–' : st.max.toFixed(2)}</span>
+      ${st.watch ? `<span class="badge badge-warning gap-1">${icon('scan-eye')} ใกล้เกณฑ์ ${st.watch} ค่า</span>` : ''}
+      ${lastR ? `<span class="badge badge-ghost gap-1">${icon('clock')} ล่าสุด ${monthLabel(lastR.month)}: L1 ${lastR.l1 === null ? '–' : lastR.l1.toFixed(2)} · L2 ${lastR.l2 === null ? '–' : lastR.l2.toFixed(2)}</span>` : ''}`;
     const opt = baseOptions(); opt.scales.y.suggestedMax = Math.max(t * 1.5, 10); opt.scales.y.title = { display: true, text: '%CV', color: css('--ink-2') };
     opt.plugins.tooltip.callbacks = { label: (c) => c.raw == null ? null : c.dataset.label.startsWith('เกณฑ์') ? ` ${c.dataset.label}` : ` ${c.dataset.label}: ${c.raw.toFixed(2)}%${c.raw >= t ? '  ▲ ไม่ผ่าน' : ''}` };
-    const mk = (label, key, color, dash) => ({ label, data: months.map((m) => rowOf(dev, m)?.[key] ?? null), borderColor: color, backgroundColor: color, borderWidth: 2.5, pointRadius: 4, pointHoverRadius: 6, pointBorderColor: css('--surface'), pointBorderWidth: 2, borderDash: dash, tension: .15 });
+    const mk = (label, key, color, dash) => ({ label, data: months.map((m) => rowOf(dev, m)?.[key] ?? null), borderColor: color, backgroundColor: color, borderWidth: 2.5, pointRadius: 4, pointHoverRadius: 6, pointBorderColor: css('--solid'), pointBorderWidth: 2, borderDash: dash, tension: .15 });
     $('#detail').showModal();
     draw('detail', $('#detailChart'), { type: 'line', plugins: [crosshair], options: opt, data: { labels: months.map((m) => monthLabel(m)), datasets: [
       mk('L1', 'l1', css('--l1'), []), mk('L2', 'l2', css('--l2'), [6, 4]),
       { label: `เกณฑ์ผ่าน < ${t}%`, data: months.map(() => t), borderColor: css('--bad'), borderDash: [2, 4], borderWidth: 2, pointRadius: 0, pointHoverRadius: 0 }] } });
     let h = '<thead><tr><th>เดือน</th><th>L1</th><th>L2</th><th style="text-align:left">ผล</th><th style="text-align:left">หมายเหตุ</th></tr></thead><tbody>';
     for (const m of [...months].reverse()) {
-      const r = rowOf(dev, m), ok = r ? passOf(r, 'ALL', t) : null;
-      const c = (v) => v === null || v === undefined ? '<td class="na">–</td>' : `<td class="${v >= t ? 'fail' : ''}">${v >= t ? '<span class="fail-mark"></span>' : ''}${v.toFixed(2)}</td>`;
-      h += `<tr><td>${monthLabel(m, true)}</td>${c(r?.l1)}${c(r?.l2)}<td style="text-align:left"><span class="pill ${ok === null ? 'na' : ok ? 'ok' : 'bad'}">${ok === null ? 'ไม่มีข้อมูล' : ok ? 'ผ่าน' : 'ไม่ผ่าน'}</span></td><td style="text-align:left;white-space:normal">${esc(r?.note || '')}</td></tr>`;
+      const r = rowOf(dev, m), nd = isND(r), ok = r && !nd ? passOf(r, 'ALL', t) : null;
+      const c = (v) => nd ? '<td class="cell-nd">ND</td>' : v === null || v === undefined ? '<td class="cell-none">–</td>' : `<td class="${v >= t ? 'cell-bad mark-bad' : v >= watchAt() ? 'cell-watch mark-watch' : ''}">${v.toFixed(2)}</td>`;
+      const pill = nd ? '<span class="badge badge-sm badge-ghost">ND ไม่ได้ทำ</span>' : ok === null ? '<span class="badge badge-sm badge-ghost">ไม่มีข้อมูล</span>' : ok ? '<span class="badge badge-sm badge-success">ผ่าน</span>' : '<span class="badge badge-sm badge-error">ไม่ผ่าน</span>';
+      h += `<tr><td>${monthLabel(m, true)}</td>${c(r?.l1)}${c(r?.l2)}<td style="text-align:left">${pill}</td><td style="text-align:left;white-space:normal">${nd ? '' : esc(r?.note || '')}</td></tr>`;
     }
     $('#detailTable').innerHTML = h + '</tbody>';
   }
 
-  /* ------------------------------------------------------------ wiring */
+  /* ------------------------------------------------------------ state, toast, wiring */
+  function toast(msg, kind) {
+    const el = document.createElement('div');
+    el.className = `alert alert-${kind || 'info'} toast-pop py-2 text-sm shadow-lg`; el.innerHTML = `<span>${esc(msg)}</span>`;
+    $('#toasts').appendChild(el); setTimeout(() => el.remove(), 2600);
+  }
+  function syncUrl() {
+    const p = new URLSearchParams();
+    p.set('fy', S.fy); p.set('lv', S.level);
+    if (S.selected.length) p.set('w', S.selected.join(','));
+    if (S.cmp) p.set('cmp', '1');
+    history.replaceState(null, '', '?' + p.toString() + location.hash);
+  }
   function renderAll() {
-    $('#thrNote').innerHTML = `เกณฑ์ผ่าน: %CV &lt; <b>${thr()}</b>%`;
-    const empty = !monthsShown().length;
-    renderKpis();
-    if (empty) {
+    $('#thrNote').innerHTML = `${icon('target')} เกณฑ์ผ่าน %CV &lt; <b>${thr()}</b>`;
+    $('#watchPct').textContent = Math.round(WATCH_RATIO * 100);
+    document.querySelectorAll('#lvlSeg button').forEach((b) => { const on = b.dataset.level === S.level; b.setAttribute('aria-pressed', String(on)); b.classList.toggle('btn-active', on); b.classList.toggle('btn-primary', on); });
+    $('#printTitle').textContent = `รายงาน %CV POCT Glucose · ${periodTxt()} · ${LV_TXT()} · ${new Date().toLocaleDateString('th-TH')}`;
+    renderSummary();
+    if (!monthsShown().length) {
       for (const k of ['bar', 'line']) S.charts[k]?.destroy();
-      $('#barTable').innerHTML = ''; $('#matrix').innerHTML = '<tbody><tr><td class="empty">ยังไม่มีข้อมูลในปีงบประมาณนี้</td></tr></tbody>';
+      $('#barTable').innerHTML = ''; $('#matrix').innerHTML = '<tbody><tr><td class="p-6" style="text-align:center">ยังไม่มีข้อมูลในปีงบประมาณนี้</td></tr></tbody>';
       return;
     }
-    renderBar(); renderPicker(); renderLine(); renderMatrix();
+    renderBar(); renderPicker(); renderLine(); renderMatrix(); syncUrl();
   }
-  function setBanner(html, err) {
-    const b = $('#banner'); b.hidden = !html; b.className = 'banner' + (err ? ' err' : ''); $('#bannerText').innerHTML = html || '';
-  }
+  function setBanner(html) { const b = $('#banner'); b.hidden = !html; $('#bannerText').innerHTML = html || ''; }
 
   async function init() {
+    hydrateIcons(); initReveal();
+    $('#btnTheme').onclick = () => { const t = Theme.toggle(); $('#btnTheme').firstElementChild.firstElementChild?.setAttribute('href', `img/icons.svg#${t === 'dark' ? 'sun' : 'moon'}`); };
+    $('#btnTheme').firstElementChild.firstElementChild?.setAttribute('href', `img/icons.svg#${Theme.current() === 'dark' ? 'sun' : 'moon'}`);
+    $('#btnPrint').onclick = () => window.print();
+    $('#btnShare').onclick = async () => { try { await navigator.clipboard.writeText(location.href); toast('คัดลอกลิงก์ (รวมตัวกรองที่เลือก) แล้ว', 'success'); } catch { toast('คัดลอกไม่สำเร็จ – คัดลอกจากแถบที่อยู่ได้เลย', 'warning'); } };
+
     let data;
-    try { data = await CV.loadData(); } catch (e) { setBanner('โหลดข้อมูลไม่สำเร็จ: ' + esc(e.message), true); return; }
+    try { data = await CV.loadData(); } catch (e) { setBanner('โหลดข้อมูลไม่สำเร็จ: ' + esc(e.message)); return; }
     S.data = data; index();
     if (data.source === 'seed') setBanner(CV.cfg.API_BASE
       ? `เชื่อมต่อ Google Sheet ไม่สำเร็จ (${esc(data.error?.message || '')}) – กำลังแสดงข้อมูลสำรองจากไฟล์ Excel ปี 2568–2569`
-      : 'โหมดตัวอย่าง – กำลังแสดงข้อมูลสำรองจากไฟล์ Excel ปี 2568–2569 (API_BASE ใน config.js เว้นว่างไว้)', !!CV.cfg.API_BASE);
+      : 'โหมดตัวอย่าง – กำลังแสดงข้อมูลสำรองจากไฟล์ Excel ปี 2568–2569 (API_BASE ใน config.js เว้นว่างไว้)');
 
     const fys = [...new Set(data.rows.map((r) => r.fy))].sort((a, b) => b - a);
-    $('#fySel').innerHTML = fys.map((f) => `<option value="${f}">ปีงบประมาณ ${f}</option>`).join('') + '<option value="all">ทุกปี (รวม)</option>';
-    S.fy = fys[0] ?? 'all'; $('#fySel').value = S.fy;
-    S.selected = topFailing(3);
+    $('#fySel').innerHTML = fys.map((f) => `<option value="${f}">${f}</option>`).join('') + '<option value="all">ทุกปี (รวม)</option>';
+    const q = new URLSearchParams(location.search);
+    S.fy = q.get('fy') === 'all' ? 'all' : fys.includes(Number(q.get('fy'))) ? Number(q.get('fy')) : (fys[0] ?? 'all');
+    S.level = ['L1', 'L2', 'ALL'].includes(q.get('lv')) ? q.get('lv') : 'ALL';
+    S.cmp = q.get('cmp') === '1'; $('#chkCmp').checked = S.cmp;
+    $('#fySel').value = S.fy;
+    const w = (q.get('w') || '').split(',').filter((d) => wardByDev(d));
+    S.selected = w.length ? w.slice(0, MAX_SEL) : topFailing(3);
 
     $('#fySel').onchange = (e) => { S.fy = e.target.value === 'all' ? 'all' : Number(e.target.value); S.selected = topFailing(3); renderAll(); };
-    $('#lvlSeg').onclick = (e) => {
-      const b = e.target.closest('button[data-level]'); if (!b) return;
-      S.level = b.dataset.level; document.querySelectorAll('#lvlSeg button').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); renderAll();
-    };
+    $('#lvlSeg').onclick = (e) => { const b = e.target.closest('button[data-level]'); if (!b) return; S.level = b.dataset.level; renderAll(); };
+    $('#chkCmp').onchange = (e) => { S.cmp = e.target.checked; renderBar(); syncUrl(); };
     $('#wardSearch').oninput = renderPicker;
     $('#wardList').onchange = (e) => {
       const d = e.target.value; const i = S.selected.indexOf(d);
       if (e.target.checked && i < 0 && S.selected.length < MAX_SEL) S.selected.push(d); else if (!e.target.checked && i >= 0) S.selected.splice(i, 1);
-      renderPicker(); renderLine();
+      renderPicker(); renderLine(); syncUrl();
     };
-    $('#btnClear').onclick = () => { S.selected = []; renderPicker(); renderLine(); };
-    $('#btnTopFail').onclick = () => { S.selected = topFailing(5); renderPicker(); renderLine(); };
+    $('#chips').onclick = (e) => { const b = e.target.closest('[data-rm]'); if (!b) return; S.selected = S.selected.filter((d) => d !== b.dataset.rm); renderPicker(); renderLine(); syncUrl(); };
+    $('#btnClear').onclick = () => { S.selected = []; renderPicker(); renderLine(); syncUrl(); };
+    $('#btnTopFail').onclick = () => { S.selected = topFailing(5); renderPicker(); renderLine(); syncUrl(); };
     $('#chkMean').onchange = (e) => { S.mean = e.target.checked; renderLine(); };
     for (const id of ['#tblSearch', '#onlyFail', '#sortSel']) $(id).addEventListener(id === '#tblSearch' ? 'input' : 'change', renderMatrix);
     $('#btnCsv').onclick = downloadCsv;
     $('#matrix').addEventListener('click', (e) => { const tr = e.target.closest('tr[data-dev]'); if (tr) openDetail(tr.dataset.dev); });
     $('#matrix').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { const tr = e.target.closest('tr[data-dev]'); if (tr) { e.preventDefault(); openDetail(tr.dataset.dev); } } });
-    $('#dClose').onclick = () => $('#detail').close();
-    $('#detail').addEventListener('click', (e) => { if (e.target.id === 'detail') e.target.close(); });
+    $('#watchlist').addEventListener('click', (e) => { const b = e.target.closest('[data-open]'); if (b) openDetail(b.dataset.open); });
     $('#detail').addEventListener('close', () => { S.charts.detail?.destroy(); });
-    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { renderAll(); });
+    document.addEventListener('themechange', () => { if (S.data && monthsShown().length) { renderBar(); renderLine(); renderPicker(); } });
 
-    $('#foot').textContent = `ข้อมูลจาก ${data.source === 'api' ? 'Google Sheet' : 'ไฟล์สำรอง (seed)'}` + (data.generatedAt ? ` · อัปเดตล่าสุด ${new Date(data.generatedAt).toLocaleString('th-TH')}` : '') + ' · เกณฑ์ผ่าน %CV < ' + data.threshold;
+    // scrollspy
+    const links = [...document.querySelectorAll('.nav-link[data-sec]')];
+    if ('IntersectionObserver' in window) {
+      const io = new IntersectionObserver((es) => es.forEach((en) => { if (en.isIntersecting) links.forEach((l) => l.classList.toggle('active', l.dataset.sec === en.target.id)); }), { rootMargin: '-35% 0px -55% 0px' });
+      links.forEach((l) => { const s = document.getElementById(l.dataset.sec); if (s) io.observe(s); });
+    }
+
+    $('#foot').innerHTML = `${icon('database')} ข้อมูลจาก ${data.source === 'api' ? 'Google Sheet' : 'ไฟล์สำรอง (seed)'}` + (data.generatedAt ? `<span class="sep">·</span>อัปเดตล่าสุด ${new Date(data.generatedAt).toLocaleString('th-TH')}` : '') + `<span class="sep">·</span>เกณฑ์ผ่าน %CV &lt; ${data.threshold}<span class="sep">·</span>ND = ไม่ได้ทำ (ไม่นำมาคำนวณ)`;
     renderAll();
   }
   init();

@@ -1,110 +1,164 @@
 <!doctype html>
-<html lang="th">
+<html lang="th" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ติดตาม %CV POCT Glucose | รพ.ศรีนครินทร์</title>
-<meta name="description" content="แดชบอร์ดติดตามค่า %CV การควบคุมคุณภาพ (IQC L1/L2) เครื่อง ACCU-Chek Inform II แยกตามหอผู้ป่วย โรงพยาบาลศรีนครินทร์">
+<meta name="description" content="แดชบอร์ดผู้บริหาร ติดตามค่า %CV การควบคุมคุณภาพ (IQC L1/L2) เครื่อง ACCU-Chek Inform II แยกตามหอผู้ป่วย โรงพยาบาลศรีนครินทร์">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b6b5b'/%3E%3Cpath d='M16 6c4 5 7 8.4 7 12a7 7 0 0 1-14 0c0-3.600 3-7 7-12z' fill='white'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/tw.css">
 <link rel="stylesheet" href="css/app.css">
+<script src="js/theme.js"></script>
 </head>
 <body>
-<header class="top">
-  <div class="wrap">
-    <div class="brand">
-      <div class="logo" aria-hidden="true">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c3.300 4.200 6 7 6 10.200A6 6 0 0 1 6 12.200C6 9 8.700 6.200 12 2z"/></svg>
-      </div>
-      <div>
-        <h1>ติดตามค่า %CV การควบคุมคุณภาพ POCT Glucose</h1>
-        <p>เครื่อง ACCU-Chek Inform II · โรงพยาบาลศรีนครินทร์</p>
-      </div>
+<div class="bg-mesh" aria-hidden="true"><i></i><i></i><i></i></div>
+
+<header class="sticky top-0 z-40 px-3 pt-3 no-print">
+  <div class="glass mx-auto flex max-w-7xl items-center gap-3 px-3 py-2">
+    <a href="index.html" class="flex min-w-0 items-center gap-3">
+      <span class="logo-mark grid h-10 w-10 flex-none place-items-center rounded-xl"><i data-i="droplet" data-c="icon-lg"></i></span>
+      <span class="min-w-0 leading-tight">
+        <span class="block truncate text-base font-extrabold">POCT Glucose · %CV Monitor</span>
+        <span class="hidden truncate text-xs opacity-70 sm:block">ACCU-Chek Inform II · โรงพยาบาลศรีนครินทร์</span>
+      </span>
+    </a>
+    <nav class="ml-auto hidden items-center gap-1 md:flex" aria-label="เมนูหน้า">
+      <a class="nav-link" href="#summary" data-sec="summary"><i data-i="layout-dashboard"></i> สรุปผู้บริหาร</a>
+      <a class="nav-link" href="#passrate" data-sec="passrate"><i data-i="chart-column"></i> ร้อยละผ่านเกณฑ์</a>
+      <a class="nav-link" href="#trend" data-sec="trend"><i data-i="chart-line"></i> แนวโน้ม</a>
+      <a class="nav-link" href="#detail-sec" data-sec="detail-sec"><i data-i="table-2"></i> รายหอผู้ป่วย</a>
+    </nav>
+    <div class="ml-auto flex items-center gap-1 md:ml-2">
+      <button class="btn btn-ghost btn-sm btn-square" id="btnTheme" type="button" aria-label="สลับโหมดมืด/สว่าง" title="สลับโหมดมืด/สว่าง"><i data-i="moon" data-c="icon-lg"></i></button>
+      <a class="btn btn-primary btn-sm gap-1" href="admin.html"><i data-i="settings"></i><span class="hidden sm:inline">จัดการข้อมูล</span></a>
     </div>
-    <nav class="nav"><a class="btn" href="admin.html">⚙ จัดการข้อมูล (Admin)</a></nav>
   </div>
 </header>
-<div id="banner" class="banner" hidden><div class="wrap" id="bannerText"></div></div>
 
-<div class="filters" role="region" aria-label="ตัวกรอง">
-  <div class="wrap">
-    <div class="field"><label for="fySel">ปีงบประมาณ</label>
-      <select id="fySel"></select></div>
-    <div class="field"><span class="lbl" id="lvlLbl">ระดับ QC</span>
-      <div class="seg" role="group" aria-labelledby="lvlLbl" id="lvlSeg">
-        <button type="button" data-level="L1" aria-pressed="false"><span class="dot" style="background:var(--l1)"></span>L1</button>
-        <button type="button" data-level="L2" aria-pressed="false"><span class="dot" style="background:var(--l2)"></span>L2</button>
-        <button type="button" data-level="ALL" aria-pressed="true"><span class="dot" style="background:var(--all)"></span>รวม L1+L2</button>
-      </div></div>
-    <div class="thr-note" id="thrNote">เกณฑ์ผ่าน: %CV &lt; <b>6.7</b>%</div>
+<div id="banner" class="no-print mx-auto mt-3 max-w-7xl px-3" hidden>
+  <div class="glass flex items-start gap-3 px-4 py-3 text-sm" role="status"><i data-i="triangle-alert" data-c="icon-lg"></i><div id="bannerText"></div></div>
+</div>
+
+<div id="toolbar" class="z-30 mx-auto max-w-7xl px-3 pt-3 md:sticky md:top-[72px]">
+  <div class="glass flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2" role="region" aria-label="ตัวกรอง">
+    <label class="flex items-center gap-2 text-sm font-semibold" for="fySel"><i data-i="calendar-days"></i><span class="hidden sm:inline">ปีงบประมาณ</span></label>
+    <select id="fySel" class="select select-bordered select-sm bg-transparent"></select>
+    <div class="join" id="lvlSeg" role="group" aria-label="ระดับ QC">
+      <button type="button" class="btn btn-sm join-item gap-1" data-level="L1" aria-pressed="false"><span class="legend-dot" style="background:var(--l1)"></span>L1</button>
+      <button type="button" class="btn btn-sm join-item gap-1" data-level="L2" aria-pressed="false"><span class="legend-dot" style="background:var(--l2)"></span>L2</button>
+      <button type="button" class="btn btn-sm join-item gap-1" data-level="ALL" aria-pressed="true"><span class="legend-dot" style="background:var(--all)"></span>รวม L1+L2</button>
+    </div>
+    <span class="badge badge-ghost gap-1" id="thrNote"><i data-i="target"></i> เกณฑ์ผ่าน %CV &lt; 6.7</span>
+    <div class="ml-auto flex items-center gap-1">
+      <button class="btn btn-ghost btn-sm gap-1" id="btnShare" type="button"><i data-i="share-2"></i><span class="hidden sm:inline">แชร์ลิงก์</span></button>
+      <button class="btn btn-ghost btn-sm gap-1" id="btnPrint" type="button"><i data-i="printer"></i><span class="hidden sm:inline">พิมพ์ / PDF</span></button>
+    </div>
   </div>
 </div>
 
-<main class="wrap" id="app">
-  <section class="kpis" id="kpis" aria-label="สรุปภาพรวม"></section>
+<main class="mx-auto grid max-w-7xl gap-5 px-3 py-5" id="app">
+  <div class="print-only"><h2 id="printTitle" class="text-lg font-bold"></h2></div>
 
-  <section class="card" aria-labelledby="h1">
-    <header>
-      <div><h2 id="h1"><span class="num-badge">1</span>ร้อยละของเครื่องที่ผ่านเกณฑ์ %CV แยกตามเดือน</h2>
-        <p class="sub" id="sub1"></p></div>
-    </header>
-    <div class="chart-box"><canvas id="barChart" role="img" aria-label="แผนภูมิแท่งร้อยละที่ผ่านเกณฑ์ %CV รายเดือน"></canvas></div>
-    <details class="tbl-toggle"><summary>ดูเป็นตาราง</summary>
-      <div class="tbl-scroll" style="margin-top:8px"><table id="barTable"></table></div></details>
+  <!-- Executive summary -->
+  <section id="summary" class="grid gap-4" aria-labelledby="hSummary">
+    <div class="glass reveal p-5" id="hero">
+      <div class="flex flex-wrap items-center gap-2 text-sm opacity-80"><i data-i="sparkles"></i><h2 id="hSummary" class="font-bold">สรุปผู้บริหาร</h2><span id="heroPeriod"></span></div>
+      <p class="mt-2 text-xl font-extrabold leading-snug sm:text-2xl" id="heroText"><span class="skeleton-glass inline-block h-7 w-2/3"></span></p>
+    </div>
+    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" id="kpis" aria-label="ตัวชี้วัดหลัก"></div>
+    <div class="grid gap-4 lg:grid-cols-5">
+      <div class="glass reveal p-5 lg:col-span-3">
+        <h3 class="mb-3 flex items-center gap-2 font-bold"><i data-i="lightbulb"></i> ข้อสังเกตอัตโนมัติ</h3>
+        <div class="grid gap-2" id="insights"></div>
+      </div>
+      <div class="glass reveal p-5 lg:col-span-2" style="--d:80ms">
+        <h3 class="mb-1 flex items-center gap-2 font-bold"><i data-i="eye"></i> รายการเฝ้าระวัง</h3>
+        <p class="mb-3 text-xs opacity-70">ไม่ผ่านต่อเนื่อง ≥ 2 เดือน หรือเดือนล่าสุดไม่ผ่าน / ใกล้เกณฑ์</p>
+        <div class="grid gap-2" id="watchlist"></div>
+      </div>
+    </div>
   </section>
 
-  <section class="card" aria-labelledby="h2">
-    <header>
-      <div><h2 id="h2"><span class="num-badge">2</span>แนวโน้ม %CV รายเดือน แยกตามหอผู้ป่วย</h2>
-        <p class="sub" id="sub2">เลือกหอผู้ป่วยได้สูงสุด 8 หอ เพื่อเปรียบเทียบ</p></div>
-    </header>
-    <div class="picker">
-      <div class="picker-side">
-        <input type="search" id="wardSearch" placeholder="ค้นหาหอผู้ป่วย / หมายเลขเครื่อง" aria-label="ค้นหาหอผู้ป่วย">
-        <div class="picker-actions">
-          <button class="btn small" type="button" id="btnTopFail">หอที่ไม่ผ่านบ่อยสุด</button>
-          <button class="btn small" type="button" id="btnClear">ล้าง</button>
-        </div>
-        <label class="check"><input type="checkbox" id="chkMean" checked> แสดงค่าเฉลี่ยทุกหอ</label>
-        <div class="picker-list" id="wardList" role="group" aria-label="เลือกหอผู้ป่วย"></div>
-        <div class="hint" id="pickHint"></div>
-      </div>
+  <!-- 1 -->
+  <section class="glass reveal p-5" id="passrate" aria-labelledby="h1">
+    <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
       <div>
-        <div class="chart-box tall"><canvas id="lineChart" role="img" aria-label="กราฟเส้น %CV รายเดือนแยกตามหอผู้ป่วย"></canvas></div>
+        <h2 id="h1" class="flex items-center gap-2 text-lg font-extrabold"><span class="badge badge-primary">1</span><i data-i="chart-column"></i> ร้อยละของเครื่องที่ผ่านเกณฑ์ %CV แยกตามเดือน</h2>
+        <p class="mt-1 text-sm opacity-75" id="sub1"></p>
       </div>
+      <label class="label cursor-pointer gap-2 py-0 text-sm"><input type="checkbox" class="toggle toggle-sm toggle-primary" id="chkCmp"> เทียบกับปีงบประมาณก่อนหน้า</label>
+    </div>
+    <div class="chart-box"><canvas id="barChart" role="img" aria-label="แผนภูมิแท่งร้อยละที่ผ่านเกณฑ์ %CV รายเดือน"></canvas></div>
+    <details class="mt-3 text-sm"><summary class="cursor-pointer font-semibold"><i data-i="table-2"></i> ดูเป็นตาราง</summary>
+      <div class="tbl-scroll mt-2"><table id="barTable"></table></div></details>
+  </section>
+
+  <!-- 2 -->
+  <section class="glass reveal p-5" id="trend" aria-labelledby="h2">
+    <div class="mb-3">
+      <h2 id="h2" class="flex items-center gap-2 text-lg font-extrabold"><span class="badge badge-primary">2</span><i data-i="chart-line"></i> แนวโน้ม %CV รายเดือน แยกตามหอผู้ป่วย</h2>
+      <p class="mt-1 text-sm opacity-75" id="sub2"></p>
+    </div>
+    <div class="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
+      <div class="grid content-start gap-2">
+        <label class="input input-bordered input-sm flex items-center gap-2 bg-transparent"><i data-i="search"></i><input type="search" id="wardSearch" class="grow" placeholder="ค้นหาหอผู้ป่วย / เครื่อง" aria-label="ค้นหาหอผู้ป่วย"></label>
+        <div class="flex flex-wrap gap-1">
+          <button class="btn btn-xs gap-1" type="button" id="btnTopFail"><i data-i="flame"></i> ไม่ผ่านบ่อยสุด</button>
+          <button class="btn btn-xs gap-1" type="button" id="btnClear"><i data-i="eraser"></i> ล้าง</button>
+        </div>
+        <label class="label cursor-pointer justify-start gap-2 py-0 text-sm"><input type="checkbox" class="checkbox checkbox-sm checkbox-primary" id="chkMean" checked> แสดงค่าเฉลี่ยทุกหอ</label>
+        <div id="chips" class="flex flex-wrap gap-1"></div>
+        <div class="picker-list" id="wardList" role="group" aria-label="เลือกหอผู้ป่วย"></div>
+        <div class="text-xs opacity-70" id="pickHint"></div>
+      </div>
+      <div class="chart-box tall"><canvas id="lineChart" role="img" aria-label="กราฟเส้น %CV รายเดือนแยกตามหอผู้ป่วย"></canvas></div>
     </div>
   </section>
 
-  <section class="card" aria-labelledby="h3">
-    <header>
-      <div><h2 id="h3"><span class="num-badge">3</span>รายละเอียด %CV แต่ละหอผู้ป่วย</h2>
-        <p class="sub">กดที่แถวของหอผู้ป่วยเพื่อดูรายละเอียดรายเดือน (L1 และ L2)</p></div>
-      <button class="btn small" type="button" id="btnCsv">⬇ ดาวน์โหลด CSV</button>
-    </header>
-    <div class="form-row" style="margin-bottom:12px">
-      <div class="field" style="flex-direction:row"><input type="search" id="tblSearch" placeholder="ค้นหาหอผู้ป่วย / เครื่อง" aria-label="ค้นหาในตาราง" style="min-width:240px"></div>
-      <label class="check"><input type="checkbox" id="onlyFail"> แสดงเฉพาะหอที่เคยไม่ผ่าน</label>
-      <div class="field" style="flex-direction:row"><label for="sortSel">เรียงตาม</label>
-        <select id="sortSel"><option value="no">ลำดับ</option><option value="fails">จำนวนครั้งที่ไม่ผ่าน (มาก→น้อย)</option><option value="max">%CV สูงสุด (มาก→น้อย)</option></select></div>
+  <!-- 3 -->
+  <section class="glass reveal p-5" id="detail-sec" aria-labelledby="h3">
+    <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h2 id="h3" class="flex items-center gap-2 text-lg font-extrabold"><span class="badge badge-primary">3</span><i data-i="table-2"></i> รายละเอียด %CV แต่ละหอผู้ป่วย</h2>
+        <p class="mt-1 text-sm opacity-75">แผนที่ความร้อน (heatmap) · กดแถวเพื่อดูรายละเอียดรายเดือนของ L1 และ L2</p>
+      </div>
+      <button class="btn btn-sm gap-1" type="button" id="btnCsv"><i data-i="download"></i> ดาวน์โหลด CSV</button>
     </div>
-    <div class="tbl-scroll"><table class="tbl-matrix" id="matrix"></table></div>
-    <div class="legend-note"><span><span class="fail fail-mark">12.34</span> = %CV ≥ เกณฑ์ (ไม่ผ่าน)</span><span>– = ไม่มีข้อมูล / ปิดปรับปรุง</span></div>
+    <div class="mb-3 flex flex-wrap items-center gap-3 no-print">
+      <label class="input input-bordered input-sm flex items-center gap-2 bg-transparent"><i data-i="search"></i><input type="search" id="tblSearch" placeholder="ค้นหาหอผู้ป่วย / เครื่อง" aria-label="ค้นหาในตาราง"></label>
+      <label class="label cursor-pointer gap-2 py-0 text-sm"><input type="checkbox" class="checkbox checkbox-sm checkbox-primary" id="onlyFail"> เฉพาะหอที่เคยไม่ผ่าน</label>
+      <label class="flex items-center gap-2 text-sm" for="sortSel"><i data-i="arrow-up-down"></i>
+        <select id="sortSel" class="select select-bordered select-sm bg-transparent"><option value="no">ลำดับ</option><option value="fails">ไม่ผ่านบ่อย → น้อย</option><option value="max">%CV สูงสุด → ต่ำสุด</option></select></label>
+    </div>
+    <div class="tbl-scroll" style="max-height:620px"><table class="tbl-matrix" id="matrix"></table></div>
+    <div class="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs opacity-80">
+      <span><span class="legend-dot" style="background:var(--bad-bg);outline:1px solid var(--bad)"></span> ▲ ≥ เกณฑ์ (ไม่ผ่าน)</span>
+      <span><span class="legend-dot" style="background:var(--warn-bg);outline:1px solid var(--warn)"></span> ● ใกล้เกณฑ์ (≥ <span id="watchPct">80</span>% ของเกณฑ์)</span>
+      <span><span class="legend-dot" style="background:var(--nd-bg);outline:1px solid var(--line)"></span> ND = ไม่ได้ทำ (ไม่นำมาคำนวณ)</span>
+      <span>– = ไม่มีข้อมูล</span>
+    </div>
   </section>
-  <footer id="foot"></footer>
+
+  <footer class="py-2 text-center text-xs opacity-70" id="foot"></footer>
 </main>
 
-<dialog id="detail" aria-labelledby="dTitle">
-  <div class="dlg-head">
-    <div><h3 id="dTitle"></h3><div class="sub" id="dSub" style="color:var(--ink-2);font-size:13px"></div></div>
-    <button class="x" id="dClose" aria-label="ปิด">✕</button>
+<dialog id="detail" class="modal" aria-labelledby="dTitle">
+  <div class="modal-box glass glass-strong max-w-4xl">
+    <div class="mb-3 flex items-start justify-between gap-3">
+      <div><h3 id="dTitle" class="text-xl font-extrabold"></h3><div id="dSub" class="text-sm opacity-75"></div></div>
+      <form method="dialog"><button class="btn btn-sm btn-circle btn-ghost" aria-label="ปิด"><i data-i="x" data-c="icon-lg"></i></button></form>
+    </div>
+    <div class="mb-3 flex flex-wrap gap-2" id="dChips"></div>
+    <div class="chart-box" style="height:270px"><canvas id="detailChart" role="img" aria-label="กราฟ %CV L1 และ L2 รายเดือนของหอผู้ป่วย"></canvas></div>
+    <div class="tbl-scroll mt-3" style="max-height:300px"><table id="detailTable"></table></div>
   </div>
-  <div class="dlg-body">
-    <div class="chart-box" style="height:280px"><canvas id="detailChart" role="img" aria-label="กราฟ %CV L1 และ L2 รายเดือนของหอผู้ป่วย"></canvas></div>
-    <div class="tbl-scroll" style="max-height:300px"><table id="detailTable"></table></div>
-  </div>
+  <form method="dialog" class="modal-backdrop"><button aria-label="ปิด">ปิด</button></form>
 </dialog>
+
+<div class="toast toast-end z-50" id="toasts"></div>
 
 <script src="vendor/chart.umd.js"></script>
 <script src="config.js"></script>

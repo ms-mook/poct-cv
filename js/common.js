@@ -47,9 +47,11 @@
     const thr = toNum(raw.threshold) ?? cfg.THRESHOLD_DEFAULT ?? 6.7;
     const wards = raw.wards.map((w) => ({ no: Number(w.no), ward: w.ward, device: w.device, active: w.active !== false }))
       .sort((a, b) => a.no - b.no);
-    const rows = raw.rows.map((r) => ({
-      month: r.month, device: r.device, l1: toNum(r.l1), l2: toNum(r.l2), note: r.note || '', fy: fiscalYear(r.month)
-    }));
+    const rows = raw.rows.map((r) => {
+      const note = r.note || '', nd = /^\s*nd\s*$/i.test(note);
+      // ND (Not Done): never used in calculations, even if a value was left in the cells
+      return { month: r.month, device: r.device, l1: nd ? null : toNum(r.l1), l2: nd ? null : toNum(r.l2), note, nd, fy: fiscalYear(r.month) };
+    });
     return { wards, rows, threshold: thr, source, error, generatedAt: raw.generatedAt || null };
   }
 
@@ -68,5 +70,11 @@
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-  window.CV = { monthLabel, fiscalYear, fiscalMonths, nextMonth, toNum, fmt, passOf, loadData, api, esc, css, cfg };
+  /** ND = Not Done: note is "ND". Never used in calculations or denominators (but counts as "recorded"). */
+  const isND = (r) => !!r && (r.nd === true || /^\s*nd\s*$/i.test(r.note || ''));
+  /** Watch zone: value >= WATCH_RATIO * threshold but still passing (e.g. 5.4–6.69 for 6.7). */
+  const WATCH_RATIO = cfg.WATCH_RATIO || 0.8;
+  const icon = (name, cls) => `<svg class="icon${cls ? ' ' + cls : ''}" aria-hidden="true"><use href="img/icons.svg#${name}"/></svg>`;
+
+  window.CV = { monthLabel, fiscalYear, fiscalMonths, nextMonth, toNum, fmt, passOf, loadData, api, esc, css, cfg, isND, WATCH_RATIO, icon };
 })();

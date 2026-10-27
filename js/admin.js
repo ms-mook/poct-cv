@@ -1,18 +1,24 @@
-/* Admin: login · monthly entry grid · ward management */
+/* Admin: login · monthly entry grid (ND = Not Done) · ward management */
 (function () {
-  const { monthLabel, nextMonth, esc, toNum } = CV;
+  const { monthLabel, nextMonth, esc, toNum, icon } = CV;
   const $ = (s) => document.querySelector(s);
+  const $$ = (s) => [...document.querySelectorAll(s)];
   const KEY = 'poct_cv_admin_pw';
-  const CLOSED_NOTE = 'ปิดปรับปรุงหอผู้ป่วย';
-  const S = { data: null, pw: null };
+  const TH = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+  const S = { data: null, pw: null, dirty: false, saving: false };
 
   const getPw = () => { try { return sessionStorage.getItem(KEY); } catch { return null; } };
   const setPw = (v) => { try { v ? sessionStorage.setItem(KEY, v) : sessionStorage.removeItem(KEY); } catch { /* private mode */ } };
+  const prevMonth = (m) => { let [y, mo] = m.split('-').map(Number); mo--; if (mo < 1) { mo = 12; y--; } return `${y}-${String(mo).padStart(2, '0')}`; };
 
   function toast(msg, err) {
-    const t = $('#toast'); t.textContent = msg; t.className = 'toast' + (err ? ' err' : ''); t.hidden = false;
-    clearTimeout(toast.id); toast.id = setTimeout(() => (t.hidden = true), err ? 6000 : 3500);
+    const el = document.createElement('div');
+    el.className = `alert ${err ? 'alert-error' : 'alert-success'} toast-pop py-2 text-sm shadow-lg`;
+    el.innerHTML = `${icon(err ? 'circle-alert' : 'circle-check')}<span>${esc(msg)}</span>`;
+    $('#toasts').appendChild(el); setTimeout(() => el.remove(), err ? 6500 : 3500);
   }
+  function banner(msg) { $('#banner').hidden = !msg; $('#bannerText').textContent = msg || ''; }
+  const setDirty = (v) => { S.dirty = v; };
 
   /* ------------------------------------------------------------ auth */
   async function login(pw) {
@@ -21,115 +27,174 @@
     $('#loginView').hidden = true; $('#adminView').hidden = false; $('#btnLogout').hidden = false;
     initEntry(); renderWards();
   }
-  function logout() { S.pw = null; setPw(null); location.reload(); }
+  function logout() { S.pw = null; setPw(null); setDirty(false); location.reload(); }
+  /** Session expired / wrong password on a later call → back to login */
+  function handleAuthError(err) {
+    if (/รหัสผ่าน|unauthorized/i.test(err.message)) { setPw(null); toast('เซสชันหมดอายุหรือรหัสผ่านไม่ถูกต้อง – กรุณาเข้าสู่ระบบใหม่', true); return true; }
+    return false;
+  }
+
+  /* ------------------------------------------------------------ month picker (Thai month + พ.ศ. selects) */
+  const curMonth = () => `${$('#mYear').value - 543}-${String($('#mMonth').value).padStart(2, '0')}`;
+  function setMonth(m) {
+    const [y, mo] = m.split('-').map(Number);
+    if (![...$('#mYear').options].some((o) => +o.value === y + 543)) $('#mYear').add(new Option(String(y + 543), y + 543));
+    $('#mYear').value = y + 543; $('#mMonth').value = mo;
+  }
+  function confirmLeave() { return !S.dirty || confirm('มีข้อมูลที่ยังไม่ได้บันทึก ต้องการเปลี่ยนเดือนโดยทิ้งการแก้ไขหรือไม่?'); }
 
   /* ------------------------------------------------------------ monthly entry */
   const rowsOfMonth = (m) => new Map(S.data.rows.filter((r) => r.month === m).map((r) => [r.device, r]));
 
   function initEntry() {
+    $('#mMonth').innerHTML = TH.map((t, i) => `<option value="${i + 1}">${t}</option>`).join('');
     const months = [...new Set(S.data.rows.map((r) => r.month))].sort();
-    $('#monthPick').value = months.length ? nextMonth(months[months.length - 1]) : new Date().toISOString().slice(0, 7);
+    const y0 = months.length ? +months[0].slice(0, 4) : new Date().getFullYear();
+    const y1 = Math.max(new Date().getFullYear(), months.length ? +months[months.length - 1].slice(0, 4) : 0) + 1;
+    $('#mYear').innerHTML = Array.from({ length: y1 - y0 + 1 }, (_, i) => `<option value="${y0 + i + 543}">${y0 + i + 543}</option>`).join('');
+    setMonth(months.length ? nextMonth(months[months.length - 1]) : new Date().toISOString().slice(0, 7));
     renderEntry();
   }
 
   function renderEntry() {
-    const m = $('#monthPick').value;
-    $('#monthTh').textContent = /^\d{4}-\d{2}$/.test(m) ? monthLabel(m, true) : '';
-    if (!/^\d{4}-\d{2}$/.test(m)) { $('#entryTable').innerHTML = ''; return; }
-    const existing = rowsOfMonth(m);
-    const q = $('#entrySearch').value.trim().toLowerCase();
+    const m = curMonth(); const existing = rowsOfMonth(m);
+    $('#monthState').className = 'badge gap-1 ' + (existing.size ? 'badge-info' : 'badge-ghost');
+    $('#monthState').innerHTML = existing.size ? `${icon('pencil')} แก้ไขข้อมูลเดิม ${existing.size} หอ` : `${icon('plus')} เดือนใหม่ (ยังไม่มีข้อมูล)`;
     const wards = S.data.wards.filter((w) => w.active || existing.has(w.device));
-    let h = '<thead><tr><th>หอผู้ป่วย</th><th>เครื่อง</th><th>L1 %CV</th><th>L2 %CV</th><th>ปิด/ไม่ได้ตรวจ</th><th style="text-align:left">หมายเหตุ</th><th style="text-align:left">ผล</th></tr></thead><tbody>';
+    let h = '<thead><tr><th class="sticky-l">หอผู้ป่วย</th><th>L1 %CV</th><th>L2 %CV</th><th>ND</th><th style="text-align:left">หมายเหตุ</th><th style="text-align:left">ผล</th></tr></thead><tbody>';
     wards.forEach((w) => {
-      const r = existing.get(w.device);
-      const closed = r && r.l1 === null && r.l2 === null && r.note;
-      const hide = q && !(w.ward + ' ' + w.device).toLowerCase().includes(q);
-      h += `<tr data-dev="${esc(w.device)}" class="${closed ? 'closed' : ''}" ${hide ? 'hidden' : ''}>
-        <td><b>${esc(w.ward)}</b>${w.active ? '' : ' <span class="pill na">ปิดใช้งาน</span>'}</td><td class="dev">${esc(w.device)}</td>
-        <td><input type="number" class="l1" step="0.01" min="0" max="100" inputmode="decimal" aria-label="L1 ${esc(w.ward)}" value="${r?.l1 ?? ''}" ${closed ? 'disabled' : ''}></td>
-        <td><input type="number" class="l2" step="0.01" min="0" max="100" inputmode="decimal" aria-label="L2 ${esc(w.ward)}" value="${r?.l2 ?? ''}" ${closed ? 'disabled' : ''}></td>
-        <td style="text-align:center"><input type="checkbox" class="closed-cb" aria-label="ปิดปรับปรุง ${esc(w.ward)}" ${closed ? 'checked' : ''}></td>
-        <td style="text-align:left"><input type="text" class="note" maxlength="200" aria-label="หมายเหตุ ${esc(w.ward)}" value="${esc(r?.note || '')}" style="min-height:34px"></td>
-        <td class="res"></td></tr>`;
+      const r = existing.get(w.device), nd = !!r && (r.nd || /^\s*nd\s*$/i.test(r.note));
+      h += `<tr data-dev="${esc(w.device)}" data-had="${r ? 1 : 0}" class="${nd ? 'nd' : ''}">
+        <td class="sticky-l"><b>${esc(w.ward)}</b>${w.active ? '' : ' <span class="badge badge-ghost badge-xs">ปิดใช้งาน</span>'}<br><span class="dev">${esc(w.device)}</span></td>
+        <td><input type="number" class="input input-bordered input-sm num l1 bg-transparent" step="0.01" min="0" max="100" inputmode="decimal" aria-label="L1 ${esc(w.ward)}" value="${r?.l1 ?? ''}" ${nd ? 'disabled' : ''}></td>
+        <td><input type="number" class="input input-bordered input-sm num l2 bg-transparent" step="0.01" min="0" max="100" inputmode="decimal" aria-label="L2 ${esc(w.ward)}" value="${r?.l2 ?? ''}" ${nd ? 'disabled' : ''}></td>
+        <td style="text-align:center"><input type="checkbox" class="checkbox checkbox-sm nd-cb" aria-label="ND ไม่ได้ทำ ${esc(w.ward)}" ${nd ? 'checked' : ''}></td>
+        <td style="text-align:left"><input type="text" class="input input-bordered input-sm note bg-transparent" maxlength="200" aria-label="หมายเหตุ ${esc(w.ward)}" value="${esc(r?.note || '')}"></td>
+        <td class="res" style="text-align:left"></td></tr>`;
     });
     $('#entryTable').innerHTML = h + '</tbody>';
-    document.querySelectorAll('#entryTable tbody tr').forEach(updateRow);
-    updateSummary();
+    $$('#entryTable tbody tr').forEach(snapshot);
+    $$('#entryTable tbody tr').forEach(updateRow);
+    applyFilter(); updateSummary(); setDirty(false); S.curM = m;
   }
+  const sig = (tr) => [tr.querySelector('.l1').value, tr.querySelector('.l2').value, tr.querySelector('.nd-cb').checked, tr.querySelector('.note').value].join('|');
+  function snapshot(tr) { tr.dataset.sig = sig(tr); }
 
   function updateRow(tr) {
     const t = S.data.threshold, res = tr.querySelector('.res');
-    const closed = tr.querySelector('.closed-cb').checked;
-    const l1 = toNum(tr.querySelector('.l1').value), l2 = toNum(tr.querySelector('.l2').value);
-    tr.classList.toggle('closed', closed);
-    if (closed) { res.innerHTML = '<span class="pill na">ปิด/ไม่ได้ตรวจ</span>'; return; }
-    if (l1 === null && l2 === null) { res.innerHTML = ''; return; }
-    const bad = (v) => v !== null && (v >= t || v < 0 || v > 100);
-    const fails = [bad(l1) && 'L1', bad(l2) && 'L2'].filter(Boolean);
-    res.innerHTML = l1 === null || l2 === null ? '<span class="pill na">กรอกไม่ครบ</span>'
-      : fails.length ? `<span class="pill bad">▲ ไม่ผ่าน ${fails.join('+')}</span>` : '<span class="pill ok">ผ่าน</span>';
+    const nd = tr.querySelector('.nd-cb').checked;
+    const i1 = tr.querySelector('.l1'), i2 = tr.querySelector('.l2');
+    const l1 = toNum(i1.value), l2 = toNum(i2.value);
+    tr.classList.toggle('nd', nd);
+    tr.classList.toggle('dirty', sig(tr) !== tr.dataset.sig);
+    const badVal = (v) => v !== null && (v < 0 || v > 100);
+    i1.classList.toggle('err', badVal(l1)); i2.classList.toggle('err', badVal(l2));
+    if (nd) { res.innerHTML = '<span class="badge badge-sm badge-ghost">ND ไม่ได้ทำ</span>'; return; }
+    if (l1 === null && l2 === null) { res.innerHTML = tr.dataset.had === '1' && tr.classList.contains('dirty') ? '<span class="badge badge-sm badge-warning">จะล้างค่าเดิม</span>' : ''; return; }
+    if (badVal(l1) || badVal(l2)) { res.innerHTML = '<span class="badge badge-sm badge-error">ค่าต้อง 0–100</span>'; return; }
+    const fails = [l1 !== null && l1 >= t && 'L1', l2 !== null && l2 >= t && 'L2'].filter(Boolean);
+    res.innerHTML = l1 === null || l2 === null ? '<span class="badge badge-sm badge-warning">กรอกไม่ครบ</span>'
+      : fails.length ? `<span class="badge badge-sm badge-error gap-1">▲ ไม่ผ่าน ${fails.join('+')}</span>` : '<span class="badge badge-sm badge-success">ผ่าน</span>';
   }
   function updateSummary() {
-    const trs = [...document.querySelectorAll('#entryTable tbody tr')];
-    let filled = 0, fail = 0, closed = 0;
+    const trs = $$('#entryTable tbody tr');
+    let done = 0, fail = 0, nd = 0, partial = 0;
     trs.forEach((tr) => {
-      if (tr.querySelector('.closed-cb').checked) { closed++; return; }
+      if (tr.querySelector('.nd-cb').checked) { nd++; done++; return; }
       const a = toNum(tr.querySelector('.l1').value), b = toNum(tr.querySelector('.l2').value);
-      if (a !== null || b !== null) { filled++; if ((a ?? 0) >= S.data.threshold || (b ?? 0) >= S.data.threshold) fail++; }
+      if (a !== null && b !== null) { done++; if (a >= S.data.threshold || b >= S.data.threshold) fail++; } else if (a !== null || b !== null) partial++;
     });
-    $('#entrySummary').textContent = `กรอกแล้ว ${filled}/${trs.length} เครื่อง · ปิด/ไม่ได้ตรวจ ${closed} · ไม่ผ่าน ${fail}`;
+    $('#entrySummary').textContent = `เสร็จ ${done}/${trs.length} หอ · ND ${nd} · ไม่ผ่าน ${fail}` + (partial ? ` · กรอกไม่ครบ ${partial}` : '');
+    $('#prog').value = trs.length ? Math.round((done / trs.length) * 100) : 0;
+    const dirty = trs.some((tr) => tr.classList.contains('dirty')); setDirty(dirty);
+    $('#btnSave').classList.toggle('btn-warning', dirty); $('#btnSave').classList.toggle('btn-primary', !dirty);
+  }
+  function applyFilter() {
+    const q = $('#entrySearch').value.trim().toLowerCase();
+    $$('#entryTable tbody tr').forEach((tr) => { tr.hidden = !!q && !(tr.textContent + tr.dataset.dev).toLowerCase().includes(q); });
   }
 
   function onEntryInput(e) {
     const tr = e.target.closest('tr[data-dev]'); if (!tr) return;
-    if (e.target.classList.contains('closed-cb')) {
-      const on = e.target.checked;
+    if (e.target.classList.contains('nd-cb')) {
+      const on = e.target.checked, note = tr.querySelector('.note');
       tr.querySelectorAll('.l1,.l2').forEach((i) => { i.disabled = on; if (on) i.value = ''; });
-      const note = tr.querySelector('.note'); if (on && !note.value) note.value = CLOSED_NOTE; if (!on && note.value === CLOSED_NOTE) note.value = '';
+      if (on && (!note.value.trim() || /^\s*nd\s*$/i.test(note.value))) note.value = 'ND';
+      if (!on && /^\s*nd\s*$/i.test(note.value)) note.value = '';
     }
     updateRow(tr); updateSummary();
   }
 
-  /** Paste a block copied from Excel (rows = wards in the visible order, cols = L1,L2) */
+  /** Enter / ↓ / ↑ move to the same column in the next / previous visible row */
+  function onEntryKey(e) {
+    const el = e.target; if (!/^(l1|l2|note)$/.test([...el.classList].find((c) => /^(l1|l2|note)$/.test(c)) || '')) return;
+    if (!['Enter', 'ArrowDown', 'ArrowUp'].includes(e.key)) return;
+    e.preventDefault();
+    const col = ['l1', 'l2', 'note'].find((c) => el.classList.contains(c));
+    const trs = $$('#entryTable tbody tr').filter((t) => !t.hidden);
+    let i = trs.indexOf(el.closest('tr')) + (e.key === 'ArrowUp' ? -1 : 1);
+    while (trs[i] && trs[i].querySelector('.' + col).disabled) i += e.key === 'ArrowUp' ? -1 : 1;
+    const next = trs[i]?.querySelector('.' + col); if (next) { next.focus(); next.select?.(); next.closest('tr').scrollIntoView({ block: 'nearest' }); }
+  }
+
+  /** Paste a block copied from Excel (rows = wards in visible order, cols = L1,L2). "ND" cells mark the row as ND. */
   function onEntryPaste(e) {
     const el = e.target; if (!el.classList.contains('l1') && !el.classList.contains('l2')) return;
     const text = (e.clipboardData || window.clipboardData).getData('text');
-    if (!/[\t\n]/.test(text.trim())) return; // single value → normal paste
+    if (!/[\t\n]/.test(text.trim())) return;
     e.preventDefault();
     const lines = text.replace(/\r/g, '').split('\n').filter((l) => l.trim() !== '').map((l) => l.split('\t'));
-    const trs = [...document.querySelectorAll('#entryTable tbody tr')].filter((tr) => !tr.hidden && !tr.querySelector('.closed-cb').checked);
+    const trs = $$('#entryTable tbody tr').filter((tr) => !tr.hidden);
     const start = trs.indexOf(el.closest('tr')); const colStart = el.classList.contains('l2') ? 1 : 0;
-    const clean = (v) => { const n = toNum(String(v ?? '').trim().replace(',', '.')); return n === null ? '' : n; };
+    let bad = 0, n = 0;
     lines.forEach((cols, i) => {
-      const tr = trs[start + i]; if (!tr) return;
-      cols.forEach((c, j) => { const k = colStart + j; if (k > 1) return; tr.querySelector(k === 0 ? '.l1' : '.l2').value = clean(c); });
+      const tr = trs[start + i]; if (!tr) return; n++;
+      if (cols.some((c) => /^\s*nd\s*$/i.test(c))) {
+        const cb = tr.querySelector('.nd-cb'); if (!cb.checked) { cb.checked = true; cb.dispatchEvent(new Event('change', { bubbles: true })); } return;
+      }
+      if (tr.querySelector('.nd-cb').checked) return;
+      cols.forEach((c, j) => {
+        const k = colStart + j; if (k > 1) return;
+        const raw = String(c ?? '').trim().replace(',', '.'); const v = toNum(raw);
+        if (raw && v === null) bad++;
+        tr.querySelector(k === 0 ? '.l1' : '.l2').value = v === null ? '' : v;
+      });
       updateRow(tr);
     });
-    updateSummary(); toast(`วางข้อมูล ${Math.min(lines.length, trs.length - start)} แถว – ตรวจทานก่อนกดบันทึก`);
+    updateSummary();
+    toast(`วางข้อมูล ${n} แถว – ตรวจทานก่อนกดบันทึก` + (bad ? ` (มี ${bad} ช่องที่ไม่ใช่ตัวเลข ถูกเว้นว่าง)` : ''), !!bad);
   }
 
   async function saveMonth() {
-    const m = $('#monthPick').value; if (!/^\d{4}-\d{2}$/.test(m)) return toast('กรุณาเลือกเดือน', true);
-    const entries = [], problems = [];
-    document.querySelectorAll('#entryTable tbody tr').forEach((tr) => {
+    if (S.saving) return;
+    const m = curMonth();
+    const entries = [], problems = []; let cleared = 0;
+    $$('#entryTable tbody tr').forEach((tr) => {
       const name = tr.querySelector('b').textContent, dev = tr.dataset.dev;
-      const closed = tr.querySelector('.closed-cb').checked, note = tr.querySelector('.note').value.trim();
+      const nd = tr.querySelector('.nd-cb').checked; let note = tr.querySelector('.note').value.trim();
       const l1 = toNum(tr.querySelector('.l1').value), l2 = toNum(tr.querySelector('.l2').value);
-      if (closed) { entries.push({ device: dev, l1: null, l2: null, note: note || CLOSED_NOTE }); return; }
-      if (l1 === null && l2 === null) return;                      // untouched → skip
-      if (l1 === null || l2 === null) { problems.push(`${name}: กรอก L1 และ L2 ให้ครบ`); return; }
+      const had = tr.dataset.had === '1', changed = tr.classList.contains('dirty');
+      if (nd) { if (changed || !had) entries.push({ device: dev, l1: null, l2: null, note: 'ND' }); return; }
+      if (l1 === null && l2 === null) {
+        if (had && changed) { cleared++; entries.push({ device: dev, l1: null, l2: null, note: /^\s*nd\s*$/i.test(note) ? '' : note }); }
+        return;
+      }
+      if (l1 === null || l2 === null) { problems.push(`${name}: กรอก L1 และ L2 ให้ครบ (หรือติ๊ก ND ถ้าไม่ได้ทำ)`); return; }
       if (l1 < 0 || l1 > 100 || l2 < 0 || l2 > 100) { problems.push(`${name}: ค่าต้องอยู่ระหว่าง 0–100`); return; }
+      if (had && !changed) return;                       // unchanged existing row → nothing to send
+      if (/^\s*nd\s*$/i.test(note)) note = '';           // values present → not ND
       entries.push({ device: dev, l1, l2, note });
     });
     if (problems.length) return toast(problems.slice(0, 3).join(' · ') + (problems.length > 3 ? ` (+${problems.length - 3})` : ''), true);
-    if (!entries.length) return toast('ยังไม่มีข้อมูลที่จะบันทึก', true);
-    const btn = $('#btnSave'); btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
+    if (!entries.length) return toast('ไม่มีการเปลี่ยนแปลงที่ต้องบันทึก', true);
+    if (cleared && !confirm(`มี ${cleared} หอที่ล้างค่า %CV เดิมออก (ข้อมูลเดิมจะถูกลบ) ต้องการบันทึกต่อหรือไม่?\nหากไม่ได้ทำ QC ให้ติ๊ก ND แทน`)) return;
+    S.saving = true; const btn = $('#btnSave'); btn.disabled = true; btn.querySelector('span').textContent = 'กำลังบันทึก…'; btn.firstElementChild.classList.add('spin-slow');
     try {
       const out = await CV.api('saveMonth', { password: S.pw, month: m, entries });
-      toast(`บันทึกแล้ว: เพิ่มใหม่ ${out.added} · แก้ไข ${out.updated} (${monthLabel(m, true)})`);
+      toast(`บันทึกแล้ว (${monthLabel(m, true)}): เพิ่มใหม่ ${out.added} · แก้ไข ${out.updated}`);
       S.data = await CV.loadData({ fresh: true }); renderEntry(); renderWards();
-    } catch (err) { toast(err.message, true); }
-    finally { btn.disabled = false; btn.textContent = '💾 บันทึกข้อมูลเดือนนี้'; }
+    } catch (err) { if (!handleAuthError(err)) toast(err.message, true); else setTimeout(() => location.reload(), 1200); }
+    finally { S.saving = false; btn.disabled = false; btn.querySelector('span').textContent = 'บันทึกข้อมูลเดือนนี้'; btn.firstElementChild.classList.remove('spin-slow'); }
   }
 
   /* ------------------------------------------------------------ wards */
@@ -137,10 +202,10 @@
     let h = '<thead><tr><th>#</th><th style="text-align:left">ชื่อหอผู้ป่วย</th><th style="text-align:left">หมายเลขเครื่อง</th><th>ใช้งาน</th><th></th></tr></thead><tbody>';
     S.data.wards.forEach((w) => {
       h += `<tr data-old="${esc(w.device)}"><td>${w.no}</td>
-        <td style="text-align:left"><input type="text" class="wn" value="${esc(w.ward)}" aria-label="ชื่อหอ" style="min-width:230px"></td>
-        <td style="text-align:left"><input type="text" class="wd" value="${esc(w.device)}" aria-label="หมายเลขเครื่อง" style="min-width:150px"></td>
-        <td style="text-align:center"><input type="checkbox" class="wa" ${w.active ? 'checked' : ''} aria-label="ใช้งาน"></td>
-        <td><button class="btn small ws" type="button">บันทึก</button></td></tr>`;
+        <td style="text-align:left"><input type="text" class="wn input input-bordered input-sm w-60 bg-transparent" value="${esc(w.ward)}" aria-label="ชื่อหอ"></td>
+        <td style="text-align:left"><input type="text" class="wd input input-bordered input-sm w-40 bg-transparent" value="${esc(w.device)}" aria-label="หมายเลขเครื่อง"></td>
+        <td style="text-align:center"><input type="checkbox" class="wa toggle toggle-sm toggle-primary" ${w.active ? 'checked' : ''} aria-label="ใช้งาน"></td>
+        <td><button class="btn btn-sm ws gap-1" type="button">${icon('save')} บันทึก</button></td></tr>`;
     });
     $('#wardTable').innerHTML = h + '</tbody>';
   }
@@ -149,45 +214,52 @@
       await CV.api('upsertWard', { password: S.pw, ward: payload });
       toast(okMsg); S.data = await CV.loadData({ fresh: true }); renderWards(); renderEntry();
       return true;
-    } catch (err) { toast(err.message, true); return false; }
+    } catch (err) { if (!handleAuthError(err)) toast(err.message, true); return false; }
   }
 
   /* ------------------------------------------------------------ init */
   function tab(which) {
     const entry = which === 'entry';
     $('#tabEntry').setAttribute('aria-selected', entry); $('#tabWards').setAttribute('aria-selected', !entry);
+    $('#tabEntry').classList.toggle('tab-active', entry); $('#tabWards').classList.toggle('tab-active', !entry);
     $('#paneEntry').hidden = !entry; $('#paneWards').hidden = entry;
   }
 
   async function init() {
-    try { S.data = await CV.loadData(); } catch (e) { $('#banner').hidden = false; $('#bannerText').textContent = 'โหลดข้อมูลไม่สำเร็จ: ' + e.message; return; }
-    if (!CV.cfg.API_BASE) {
-      $('#banner').hidden = false; $('#bannerText').textContent = 'ยังไม่ได้ตั้งค่า API_BASE ใน config.js – เข้าสู่ระบบและบันทึกข้อมูลไม่ได้ (ดูขั้นตอนใน README.md)';
-      $('#loginBtn').disabled = true;
-    } else if (S.data.source === 'seed') {
-      $('#banner').hidden = false; $('#bannerText').textContent = 'อ่านข้อมูลจาก Google Sheet ไม่สำเร็จ: ' + (S.data.error?.message || '') + ' – ตรวจ Environment Variables ใน Vercel และการ Deploy Apps Script (ดู README.md)';
-    }
+    hydrateIcons();
+    const setThemeIcon = () => $('#btnTheme').querySelector('use')?.setAttribute('href', `img/icons.svg#${Theme.current() === 'dark' ? 'sun' : 'moon'}`);
+    setThemeIcon(); $('#btnTheme').onclick = () => { Theme.toggle(); setThemeIcon(); };
+    $('#pwToggle').onclick = () => { const i = $('#pw'); const show = i.type === 'password'; i.type = show ? 'text' : 'password'; $('#pwToggle').querySelector('use').setAttribute('href', `img/icons.svg#${show ? 'eye-off' : 'eye'}`); };
+    try { S.data = await CV.loadData({ fresh: true }); } catch (e) { banner('โหลดข้อมูลไม่สำเร็จ: ' + e.message); return; }
+    if (!CV.cfg.API_BASE) { banner('ยังไม่ได้ตั้งค่า API_BASE ใน config.js – เข้าสู่ระบบและบันทึกข้อมูลไม่ได้ (ดูขั้นตอนใน README.md)'); $('#loginBtn').disabled = true; }
+    else if (S.data.source === 'seed') banner('อ่านข้อมูลจาก Google Sheet ไม่สำเร็จ: ' + (S.data.error?.message || '') + ' – ตรวจ Environment Variables ใน Vercel และการ Deploy Apps Script (ดู README.md)');
+
     $('#loginForm').onsubmit = async (e) => {
       e.preventDefault(); const b = $('#loginBtn'); b.disabled = true; $('#loginErr').textContent = '';
-      try { await login($('#pw').value); } catch (err) { $('#loginErr').textContent = err.message; } finally { b.disabled = !CV.cfg.API_BASE; }
+      try { await login($('#pw').value); } catch (err) { $('#loginErr').textContent = err.message; $('#pw').select(); } finally { b.disabled = !CV.cfg.API_BASE; }
     };
-    $('#btnLogout').onclick = logout;
+    $('#btnLogout').onclick = () => { if (!S.dirty || confirm('มีข้อมูลที่ยังไม่ได้บันทึก ออกจากระบบหรือไม่?')) logout(); };
     $('#tabEntry').onclick = () => tab('entry'); $('#tabWards').onclick = () => tab('wards');
-    $('#monthPick').onchange = renderEntry; $('#entrySearch').oninput = () => {
-      const q = $('#entrySearch').value.trim().toLowerCase();
-      document.querySelectorAll('#entryTable tbody tr').forEach((tr) => { tr.hidden = !!q && !(tr.textContent + tr.dataset.dev).toLowerCase().includes(q); });
-    };
-    const et = $('#entryTable'); et.addEventListener('input', onEntryInput); et.addEventListener('change', onEntryInput); et.addEventListener('paste', onEntryPaste);
+
+    const change = (fn) => () => { if (!confirmLeave()) { setMonth(S.curM); return; } fn(); S.curM = curMonth(); renderEntry(); };
+    $('#mMonth').onchange = change(() => {}); $('#mYear').onchange = change(() => {});
+    $('#mPrev').onclick = change(() => setMonth(prevMonth(curMonth()))); $('#mNext').onclick = change(() => setMonth(nextMonth(curMonth())));
+    $('#entrySearch').oninput = applyFilter;
+    const et = $('#entryTable'); et.addEventListener('input', onEntryInput); et.addEventListener('change', onEntryInput); et.addEventListener('paste', onEntryPaste); et.addEventListener('keydown', onEntryKey);
+    et.addEventListener('focusin', (e) => { if (e.target.matches('input[type=number]')) e.target.select(); });
     $('#btnSave').onclick = saveMonth;
+    document.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's' && !$('#adminView').hidden && !$('#paneEntry').hidden) { e.preventDefault(); saveMonth(); } });
+    window.addEventListener('beforeunload', (e) => { if (S.dirty) { e.preventDefault(); e.returnValue = ''; } });
+
     $('#wardForm').onsubmit = async (e) => {
       e.preventDefault();
-      if (await saveWard({ ward: $('#wName').value, device: $('#wDev').value, active: true, isNew: true }, 'เพิ่มหอ/เครื่องแล้ว')) e.target.reset();
+      if (await saveWard({ ward: $('#wName').value.trim(), device: $('#wDev').value.trim(), active: true, isNew: true }, 'เพิ่มหอ/เครื่องแล้ว')) e.target.reset();
     };
     $('#wardTable').addEventListener('click', (e) => {
       const b = e.target.closest('.ws'); if (!b) return; const tr = b.closest('tr');
       const dev = tr.querySelector('.wd').value.trim(), old = tr.dataset.old;
       if (dev !== old && !confirm(`เปลี่ยนหมายเลขเครื่องจาก ${old} เป็น ${dev}?\nข้อมูลย้อนหลังของเครื่องนี้จะถูกย้ายไปที่หมายเลขใหม่ทั้งหมด`)) return;
-      saveWard({ ward: tr.querySelector('.wn').value, device: dev, oldDevice: old, active: tr.querySelector('.wa').checked }, 'บันทึกแล้ว');
+      saveWard({ ward: tr.querySelector('.wn').value.trim(), device: dev, oldDevice: old, active: tr.querySelector('.wa').checked }, 'บันทึกแล้ว');
     });
     const saved = getPw();
     if (saved && CV.cfg.API_BASE) { try { await login(saved); } catch { setPw(null); } }
