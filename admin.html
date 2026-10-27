@@ -48,12 +48,13 @@
     <div role="tablist" class="tabs tabs-boxed glass w-fit gap-1 p-1">
       <button role="tab" id="tabEntry" class="tab gap-2 tab-active" aria-selected="true"><i data-i="clipboard-paste"></i> บันทึก / แก้ไข %CV รายเดือน</button>
       <button role="tab" id="tabWards" class="tab gap-2" aria-selected="false"><i data-i="hospital"></i> หอผู้ป่วย / เครื่อง</button>
+      <button role="tab" id="tabHist" class="tab gap-2" aria-selected="false"><i data-i="history"></i> ประวัติการแก้ไข</button>
     </div>
 
     <section class="glass p-5" id="paneEntry" role="tabpanel">
       <div class="mb-3">
         <h2 class="flex items-center gap-2 text-lg font-extrabold"><i data-i="clipboard-paste"></i> บันทึกผล IQC รายเดือน</h2>
-        <p class="mt-1 text-sm opacity-75">เลือกเดือน แล้วกรอก %CV ของ L1 และ L2 · เลือกเดือนที่มีข้อมูลเพื่อแก้ไข · <b>ไม่ได้ทำ QC ให้ติ๊ก “ND”</b> (ไม่นำมาคำนวณ) · วางจาก Excel ได้ (คัดลอก 2 คอลัมน์ L1, L2 วางที่ช่อง L1 แถวแรก)</p>
+        <p class="mt-1 text-sm opacity-75">เลือกเดือน แล้วกรอก %CV ของ L1 และ L2 · เลือกเดือนที่มีข้อมูลเพื่อแก้ไข · <b>ไม่ได้ทำ QC ให้ติ๊ก “ND”</b> (ไม่นำมาคำนวณ) · วางจาก Excel ได้: เรียงหอตามตารางนี้ แล้วคัดลอก 2 คอลัมน์ (L1, L2) วางที่ช่อง L1 แถวแรก หรือใช้ปุ่ม “คัดลอกรายชื่อหอ” ไปจัดเรียงใน Excel ก่อน</p>
       </div>
       <div class="flex flex-wrap items-center gap-2">
         <button class="btn btn-sm btn-square" id="mPrev" type="button" aria-label="เดือนก่อนหน้า"><i data-i="chevron-left"></i></button>
@@ -61,6 +62,7 @@
         <select id="mYear" class="select select-bordered select-sm bg-transparent" aria-label="ปี พ.ศ."></select>
         <button class="btn btn-sm btn-square" id="mNext" type="button" aria-label="เดือนถัดไป"><i data-i="chevron-right"></i></button>
         <span id="monthState" class="badge badge-ghost"></span>
+        <button class="btn btn-ghost btn-sm gap-1" id="btnCopyWards" type="button"><i data-i="copy"></i> คัดลอกรายชื่อหอ</button>
         <label class="input input-bordered input-sm ml-auto flex items-center gap-2 bg-transparent"><i data-i="search"></i><input type="search" id="entrySearch" placeholder="ค้นหาหอผู้ป่วย" aria-label="ค้นหาหอผู้ป่วย"></label>
       </div>
       <progress class="progress progress-primary mt-3 w-full" id="prog" value="0" max="100" aria-label="ความคืบหน้าการกรอก"></progress>
@@ -78,11 +80,20 @@
       <form class="mb-4 flex flex-wrap items-end gap-3" id="wardForm">
         <label class="form-control"><span class="label-text mb-1 font-semibold">ชื่อหอผู้ป่วย</span><input type="text" id="wName" class="input input-bordered input-sm w-60 bg-transparent" required placeholder="เช่น หอผู้ป่วย สว.16"></label>
         <label class="form-control"><span class="label-text mb-1 font-semibold">หมายเลขเครื่อง</span><input type="text" id="wDev" class="input input-bordered input-sm w-44 bg-transparent" required placeholder="UU14xxxxxx"></label>
+        <label class="form-control"><span class="label-text mb-1 font-semibold">กลุ่มหอ (ไม่บังคับ)</span><input type="text" id="wGrp" list="grpList" class="input input-bordered input-sm w-40 bg-transparent" placeholder="เช่น ICU, OPD"></label>
         <button class="btn btn-primary btn-sm gap-1" type="submit"><i data-i="plus"></i> เพิ่มหอ/เครื่อง</button>
       </form>
       <div class="tbl-scroll"><table id="wardTable"></table></div>
     </section>
+
+    <section class="glass p-5" id="paneHist" role="tabpanel" hidden>
+      <div class="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h2 class="flex items-center gap-2 text-lg font-extrabold"><i data-i="history"></i> ประวัติการแก้ไขข้อมูล</h2>
+        <p class="mt-1 text-sm opacity-75">บันทึกอัตโนมัติทุกครั้งที่บันทึกข้อมูลรายเดือน (300 รายการล่าสุด · เก็บในชีต Log)</p></div>
+        <button class="btn btn-sm gap-1" id="btnHist" type="button"><i data-i="refresh-cw"></i> โหลดใหม่</button></div>
+      <div class="tbl-scroll" style="max-height:62vh"><table id="histTable"></table></div>
+    </section>
   </main>
+  <datalist id="grpList"></datalist>
 </div>
 <div class="toast toast-end z-50" id="toasts"></div>
 

@@ -80,3 +80,11 @@ Vercel → Project → **Settings > Environment Variables** (เลือก Pro
 
 ## แก้ UI (Tailwind + daisyUI + Lucide)
 ไฟล์ที่ build แล้ว (`css/tw.css`, `img/icons.svg`) ถูก commit ไว้ Vercel ไม่ต้อง build. แก้สไตล์/ไอคอนแล้วรัน `cd tools/ui && npm install && npm run build`
+
+## อัปเดตรอบที่ 2 (ต้องทำที่ Apps Script)
+1. วาง `apps-script/Code.gs` ใหม่ → รัน `setup()` อีกครั้ง (สร้างคอลัมน์ `group` ใน Wards, แถว `target_pass_pct` ใน Config, ชีต `Log`)
+2. Deploy > Manage deployments > แก้ไข > New version
+3. ตั้งกลุ่มหอในหน้า Admin (แท็บ หอผู้ป่วย/เครื่อง) → Dashboard จะมีตัวกรองและการ์ดสรุปรายกลุ่ม
+4. เปลี่ยนเป้าหมายร้อยละที่ผ่านเกณฑ์ได้ที่ชีต Config (`target_pass_pct`, ค่าเริ่มต้น 95)
+5. ประวัติการแก้ไขอยู่ในแท็บ “ประวัติการแก้ไข” (บันทึกเริ่มหลังอัปเดตนี้)
+6. `/api/admin` ล็อก IP 15 นาที หากใส่รหัสผ่านผิด 5 ครั้ง

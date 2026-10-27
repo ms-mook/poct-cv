@@ -45,14 +45,15 @@
       source = 'seed';
     }
     const thr = toNum(raw.threshold) ?? cfg.THRESHOLD_DEFAULT ?? 6.7;
-    const wards = raw.wards.map((w) => ({ no: Number(w.no), ward: w.ward, device: w.device, active: w.active !== false }))
+    const wards = raw.wards.map((w) => ({ no: Number(w.no), ward: w.ward, device: w.device, active: w.active !== false, group: (w.group || '').trim() }))
       .sort((a, b) => a.no - b.no);
     const rows = raw.rows.map((r) => {
       const note = r.note || '', nd = /^\s*nd\s*$/i.test(note);
       // ND (Not Done): never used in calculations, even if a value was left in the cells
       return { month: r.month, device: r.device, l1: nd ? null : toNum(r.l1), l2: nd ? null : toNum(r.l2), note, nd, fy: fiscalYear(r.month) };
     });
-    return { wards, rows, threshold: thr, source, error, generatedAt: raw.generatedAt || null };
+    const target = toNum(raw.target) ?? cfg.TARGET_DEFAULT ?? 95;
+    return { wards, rows, threshold: thr, target, source, error, generatedAt: raw.generatedAt || null };
   }
 
   async function api(action, payload) {

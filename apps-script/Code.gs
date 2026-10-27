@@ -18,7 +18,9 @@
 var SHEET_DATA = 'Data';
 var SHEET_WARDS = 'Wards';
 var SHEET_CONFIG = 'Config';
+var SHEET_LOG = 'Log';
 var DEFAULT_THRESHOLD = 6.7;
+var DEFAULT_TARGET = 95;
 
 /* ------------------------------------------------------------------ setup */
 
@@ -30,7 +32,13 @@ function setup() {
   d.getRange('B:B').setNumberFormat('@');
   d.getRange('C:D').setNumberFormat('0.00');
   d.setFrozenRows(1);
-  ss.getSheetByName(SHEET_WARDS).getRange('B:C').setNumberFormat('@');
+  var wsh = ss.getSheetByName(SHEET_WARDS);
+  wsh.getRange('B:C').setNumberFormat('@');
+  if (String(wsh.getRange('E1').getValue()) !== 'group') wsh.getRange('E1').setValue('group');   // กลุ่มหอ (เช่น ICU, OPD)
+  ensureLog_();
+  var cfg = ss.getSheetByName(SHEET_CONFIG), has = false;
+  cfg.getDataRange().getValues().forEach(function (r) { if (r[0] === 'target_pass_pct') has = true; });
+  if (!has) cfg.appendRow(['target_pass_pct', DEFAULT_TARGET, 'เป้าหมายร้อยละเครื่องที่ผ่านเกณฑ์ (%)']);
   if (!PropertiesService.getScriptProperties().getProperty('API_KEY')) {
     Logger.log('ยังไม่ได้ตั้ง API_KEY: รันฟังก์ชัน createApiKey (หรือ Project Settings > Script properties > Add)');
   }
@@ -76,6 +84,7 @@ function doPost(e) {
     try {
       if (body.action === 'saveMonth') return json_(saveMonth_(body));
       if (body.action === 'upsertWard') return json_(upsertWard_(body));
+      if (body.action === 'history') return json_(history_(body));
     } finally {
       lock.releaseLock();
     }
@@ -114,7 +123,7 @@ function readAll_() {
   for (var i = 1; i < wv.length; i++) {
     if (!wv[i][2]) continue;
     wards.push({ no: Number(wv[i][0]) || i, ward: String(wv[i][1]), device: String(wv[i][2]),
-                 active: !(wv[i][3] === false || String(wv[i][3]).toUpperCase() === 'FALSE') });
+                 active: !(wv[i][3] === false || String(wv[i][3]).toUpperCase() === 'FALSE'), group: String(wv[i][4] || '').trim() });
   }
   var dv = ss.getSheetByName(SHEET_DATA).getDataRange().getValues();
   var rows = [];
@@ -123,10 +132,11 @@ function readAll_() {
     rows.push({ month: monthText_(dv[j][0]), device: String(dv[j][1]).trim(),
                 l1: num_(dv[j][2]), l2: num_(dv[j][3]), note: String(dv[j][4] || '') });
   }
-  var threshold = DEFAULT_THRESHOLD;
+  var threshold = DEFAULT_THRESHOLD, target = DEFAULT_TARGET;
   var cv = ss.getSheetByName(SHEET_CONFIG).getDataRange().getValues();
   for (var k = 1; k < cv.length; k++) if (cv[k][0] === 'cv_threshold' && num_(cv[k][1]) !== null) threshold = num_(cv[k][1]);
-  return { ok: true, threshold: threshold, wards: wards, rows: rows, generatedAt: new Date().toISOString() };
+  for (var q = 1; q < cv.length; q++) if (cv[q][0] === 'target_pass_pct' && num_(cv[q][1]) !== null) target = num_(cv[q][1]);
+  return { ok: true, threshold: threshold, target: target, wards: wards, rows: rows, generatedAt: new Date().toISOString() };
 }
 
 /* ------------------------------------------------------------------ write */
@@ -157,13 +167,18 @@ function saveMonth_(body) {
   values.forEach(function (r, i) { index[monthText_(r[0]) + '|' + String(r[1]).trim()] = i; });
 
   var now = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd HH:mm');
-  var appended = [], updated = 0;
+  var appended = [], updated = 0, logs = [];
+  var show = function (a, b, n) { return (a === '' || a === null ? '–' : a) + ' / ' + (b === '' || b === null ? '–' : b) + (n ? ' [' + n + ']' : ''); };
   clean.forEach(function (c) {
     var rec = [month, c.device, c.l1 === null ? '' : c.l1, c.l2 === null ? '' : c.l2, c.note, now];
     var key = month + '|' + c.device;
-    if (key in index) { values[index[key]] = rec; updated++; }
-    else appended.push(rec);
+    if (key in index) {
+      var o = values[index[key]];
+      logs.push([now, 'แก้ไข', month, c.device, show(o[2], o[3], o[4]), show(rec[2], rec[3], rec[4])]);
+      values[index[key]] = rec; updated++;
+    } else { appended.push(rec); logs.push([now, 'เพิ่ม', month, c.device, '', show(rec[2], rec[3], rec[4])]); }
   });
+  if (logs.length) { var lg = ensureLog_(); lg.getRange(lg.getLastRow() + 1, 1, logs.length, 6).setValues(logs); }
   if (updated) sh.getRange(2, 1, values.length, 6).setValues(values);
   if (appended.length) sh.getRange(last + 1, 1, appended.length, 6).setValues(appended);
   SpreadsheetApp.flush();
@@ -187,10 +202,11 @@ function upsertWard_(body) {
   if (w.isNew && rowIdx >= 0) throw new Error('หมายเลขเครื่องนี้มีอยู่แล้ว');
   if (rowIdx >= 0) {
     sh.getRange(rowIdx + 1, 2, 1, 3).setValues([[ward, device, active]]);
+    sh.getRange(rowIdx + 1, 5).setValue(String(w.group || '').trim());
     if (oldDevice !== device) renameDevice_(oldDevice, device);
     return { ok: true, mode: 'updated' };
   }
-  sh.appendRow([maxNo + 1, ward, device, active]);
+  sh.appendRow([maxNo + 1, ward, device, active, String(w.group || '').trim()]);
   return { ok: true, mode: 'added' };
 }
 
@@ -201,4 +217,19 @@ function renameDevice_(from, to) {
   var rng = sh.getRange(2, 2, last - 1, 1), v = rng.getValues();
   v.forEach(function (r) { if (String(r[0]).trim() === from) r[0] = to; });
   rng.setValues(v);
+}
+
+/* ------------------------------------------------------------ audit log */
+
+function ensureLog_() {
+  var ss = SpreadsheetApp.getActive(), sh = ss.getSheetByName(SHEET_LOG);
+  if (!sh) { sh = ss.insertSheet(SHEET_LOG); sh.appendRow(['time', 'action', 'month', 'device', 'before (L1 / L2 [note])', 'after (L1 / L2 [note])']); sh.setFrozenRows(1); sh.getRange('A:F').setNumberFormat('@'); }
+  return sh;
+}
+/** latest 300 changes, newest first */
+function history_() {
+  var sh = ensureLog_(), last = sh.getLastRow();
+  if (last < 2) return { ok: true, items: [] };
+  var n = Math.min(300, last - 1), v = sh.getRange(last - n + 1, 1, n, 6).getValues().reverse();
+  return { ok: true, items: v.map(function (r) { return { time: String(r[0]), action: String(r[1]), month: String(r[2]), device: String(r[3]), before: String(r[4]), after: String(r[5]) }; }) };
 }

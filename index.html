@@ -46,6 +46,7 @@
   <div class="glass flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2" role="region" aria-label="ตัวกรอง">
     <label class="flex items-center gap-2 text-sm font-semibold" for="fySel"><i data-i="calendar-days"></i><span class="hidden sm:inline">ปีงบประมาณ</span></label>
     <select id="fySel" class="select select-bordered select-sm bg-transparent"></select>
+    <span id="grpWrap" class="flex items-center gap-2" hidden><i data-i="building-2"></i><select id="grpSel" class="select select-bordered select-sm bg-transparent" aria-label="กลุ่มหอ"></select></span>
     <div class="join" id="lvlSeg" role="group" aria-label="ระดับ QC">
       <button type="button" class="btn btn-sm join-item gap-1" data-level="L1" aria-pressed="false"><span class="legend-dot" style="background:var(--l1)"></span>L1</button>
       <button type="button" class="btn btn-sm join-item gap-1" data-level="L2" aria-pressed="false"><span class="legend-dot" style="background:var(--l2)"></span>L2</button>
@@ -81,6 +82,12 @@
       </div>
     </div>
   </section>
+
+  <div class="glass reveal p-5" id="groupCard" hidden>
+    <h3 class="mb-1 flex items-center gap-2 font-bold"><i data-i="building-2"></i> ภาพรวมรายกลุ่มหอ (เดือนล่าสุด)</h3>
+    <p class="mb-3 text-xs opacity-70">กดการ์ดเพื่อกรองทั้งหน้าตามกลุ่ม · กดซ้ำเพื่อยกเลิก</p>
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" id="groupList"></div>
+  </div>
 
   <!-- 1 -->
   <section class="glass reveal p-5" id="passrate" aria-labelledby="h1">

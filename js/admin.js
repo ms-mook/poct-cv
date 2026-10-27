@@ -199,15 +199,17 @@
 
   /* ------------------------------------------------------------ wards */
   function renderWards() {
-    let h = '<thead><tr><th>#</th><th style="text-align:left">ชื่อหอผู้ป่วย</th><th style="text-align:left">หมายเลขเครื่อง</th><th>ใช้งาน</th><th></th></tr></thead><tbody>';
+    let h = '<thead><tr><th>#</th><th style="text-align:left">ชื่อหอผู้ป่วย</th><th style="text-align:left">หมายเลขเครื่อง</th><th style="text-align:left">กลุ่มหอ</th><th>ใช้งาน</th><th></th></tr></thead><tbody>';
     S.data.wards.forEach((w) => {
       h += `<tr data-old="${esc(w.device)}"><td>${w.no}</td>
         <td style="text-align:left"><input type="text" class="wn input input-bordered input-sm w-60 bg-transparent" value="${esc(w.ward)}" aria-label="ชื่อหอ"></td>
         <td style="text-align:left"><input type="text" class="wd input input-bordered input-sm w-40 bg-transparent" value="${esc(w.device)}" aria-label="หมายเลขเครื่อง"></td>
+        <td style="text-align:left"><input type="text" class="wg input input-bordered input-sm w-32 bg-transparent" list="grpList" value="${esc(w.group || '')}" aria-label="กลุ่มหอ"></td>
         <td style="text-align:center"><input type="checkbox" class="wa toggle toggle-sm toggle-primary" ${w.active ? 'checked' : ''} aria-label="ใช้งาน"></td>
         <td><button class="btn btn-sm ws gap-1" type="button">${icon('save')} บันทึก</button></td></tr>`;
     });
     $('#wardTable').innerHTML = h + '</tbody>';
+    $('#grpList').innerHTML = [...new Set(S.data.wards.map((w) => w.group).filter(Boolean))].map((g) => `<option value="${esc(g)}">`).join('');
   }
   async function saveWard(payload, okMsg) {
     try {
@@ -217,12 +219,25 @@
     } catch (err) { if (!handleAuthError(err)) toast(err.message, true); return false; }
   }
 
+  async function loadHistory() {
+    const t = $('#histTable'); t.innerHTML = '<tbody><tr><td style="text-align:center" class="p-6">กำลังโหลด…</td></tr></tbody>';
+    try {
+      const out = await CV.api('history', { password: S.pw });
+      const name = (d) => S.data.wards.find((w) => w.device === d)?.ward || d;
+      t.innerHTML = '<thead><tr><th style="text-align:left">เวลา</th><th style="text-align:left">การกระทำ</th><th style="text-align:left">เดือน</th><th style="text-align:left">หอผู้ป่วย</th><th style="text-align:left">ก่อน (L1 / L2)</th><th style="text-align:left">หลัง (L1 / L2)</th></tr></thead><tbody>'
+        + (out.items.length ? out.items.map((i) => `<tr><td style="text-align:left">${esc(i.time)}</td><td style="text-align:left"><span class="badge badge-sm ${i.action === 'เพิ่ม' ? 'badge-success' : 'badge-warning'}">${esc(i.action)}</span></td><td style="text-align:left">${/^\d{4}-\d{2}$/.test(i.month) ? monthLabel(i.month) : esc(i.month)}</td><td style="text-align:left">${esc(name(i.device))}<br><span class="dev">${esc(i.device)}</span></td><td style="text-align:left">${esc(i.before || '–')}</td><td style="text-align:left"><b>${esc(i.after)}</b></td></tr>`).join('')
+          : '<tr><td colspan="6" style="text-align:center" class="p-6">ยังไม่มีประวัติ (เริ่มบันทึกหลังอัปเดต Apps Script)</td></tr>') + '</tbody>';
+    } catch (err) { if (!handleAuthError(err)) t.innerHTML = `<tbody><tr><td style="text-align:center" class="p-6">${esc(err.message)}</td></tr></tbody>`; }
+  }
+
   /* ------------------------------------------------------------ init */
   function tab(which) {
     const entry = which === 'entry';
-    $('#tabEntry').setAttribute('aria-selected', entry); $('#tabWards').setAttribute('aria-selected', !entry);
-    $('#tabEntry').classList.toggle('tab-active', entry); $('#tabWards').classList.toggle('tab-active', !entry);
-    $('#paneEntry').hidden = !entry; $('#paneWards').hidden = entry;
+    for (const k of ['entry', 'wards', 'hist']) {
+      const on = k === which, cap = k[0].toUpperCase() + k.slice(1);
+      $('#tab' + cap).setAttribute('aria-selected', on); $('#tab' + cap).classList.toggle('tab-active', on); $('#pane' + cap).hidden = !on;
+    }
+    if (which === 'hist') loadHistory();
   }
 
   async function init() {
@@ -239,7 +254,8 @@
       try { await login($('#pw').value); } catch (err) { $('#loginErr').textContent = err.message; $('#pw').select(); } finally { b.disabled = !CV.cfg.API_BASE; }
     };
     $('#btnLogout').onclick = () => { if (!S.dirty || confirm('มีข้อมูลที่ยังไม่ได้บันทึก ออกจากระบบหรือไม่?')) logout(); };
-    $('#tabEntry').onclick = () => tab('entry'); $('#tabWards').onclick = () => tab('wards');
+    $('#tabEntry').onclick = () => tab('entry'); $('#tabWards').onclick = () => tab('wards'); $('#tabHist').onclick = () => tab('hist'); $('#btnHist').onclick = loadHistory;
+    $('#btnCopyWards').onclick = async () => { const txt = $$('#entryTable tbody tr').filter((t) => !t.hidden).map((t) => t.querySelector('b').textContent + '\t' + t.dataset.dev).join('\n'); try { await navigator.clipboard.writeText(txt); toast('คัดลอกรายชื่อหอ (ชื่อ, เครื่อง) แล้ว'); } catch { toast('คัดลอกไม่สำเร็จ', true); } };
 
     const change = (fn) => () => { if (!confirmLeave()) { setMonth(S.curM); return; } fn(); S.curM = curMonth(); renderEntry(); };
     $('#mMonth').onchange = change(() => {}); $('#mYear').onchange = change(() => {});
@@ -253,13 +269,13 @@
 
     $('#wardForm').onsubmit = async (e) => {
       e.preventDefault();
-      if (await saveWard({ ward: $('#wName').value.trim(), device: $('#wDev').value.trim(), active: true, isNew: true }, 'เพิ่มหอ/เครื่องแล้ว')) e.target.reset();
+      if (await saveWard({ ward: $('#wName').value.trim(), device: $('#wDev').value.trim(), active: true, isNew: true, group: $('#wGrp').value.trim() }, 'เพิ่มหอ/เครื่องแล้ว')) e.target.reset();
     };
     $('#wardTable').addEventListener('click', (e) => {
       const b = e.target.closest('.ws'); if (!b) return; const tr = b.closest('tr');
       const dev = tr.querySelector('.wd').value.trim(), old = tr.dataset.old;
       if (dev !== old && !confirm(`เปลี่ยนหมายเลขเครื่องจาก ${old} เป็น ${dev}?\nข้อมูลย้อนหลังของเครื่องนี้จะถูกย้ายไปที่หมายเลขใหม่ทั้งหมด`)) return;
-      saveWard({ ward: tr.querySelector('.wn').value.trim(), device: dev, oldDevice: old, active: tr.querySelector('.wa').checked }, 'บันทึกแล้ว');
+      saveWard({ ward: tr.querySelector('.wn').value.trim(), device: dev, oldDevice: old, active: tr.querySelector('.wa').checked, group: tr.querySelector('.wg').value.trim() }, 'บันทึกแล้ว');
     });
     const saved = getPw();
     if (saved && CV.cfg.API_BASE) { try { await login(saved); } catch { setPw(null); } }

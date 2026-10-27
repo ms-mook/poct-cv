@@ -168,3 +168,6 @@ footer .sep { opacity: .35; margin: 0 .4rem; }
 #app { grid-template-columns: minmax(0, 1fr); }
 details > summary { list-style: none; display: inline-flex; align-items: center; gap: .4rem; }
 details > summary::-webkit-details-marker { display: none; }
+
+/* the hidden attribute must win over component display classes (grid/flex/btn) */
+[hidden] { display: none !important; }
