@@ -582,7 +582,7 @@
       + (shown.length ? shown.map(([w, c, issue, val, act]) => `<tr><td><b>${esc(shortWard(w))}</b> <span style="color:#777;font-size:9.5px">${esc(w.device)}</span></td><td><span class="tag ${c}">${issue}</span></td><td>${val}</td><td>${act}</td></tr>`).join('')
         : '<tr><td colspan="4" style="text-align:center;padding:14px">ไม่มีหอที่ต้องดำเนินการ – ผ่านเกณฑ์และส่งข้อมูลครบทุกหอ</td></tr>')
       + (acts.length > MAXR ? `<tr><td colspan="4" style="color:#555">และอีก ${acts.length - MAXR} รายการ (ดูใน Dashboard หัวข้อ 3)</td></tr>` : '') + '</tbody>';
-    $('#opFootL').textContent = `จัดทำจากระบบติดตาม %CV POCT Glucose · พิมพ์เมื่อ ${new Date().toLocaleString('th-TH', { dateStyle: 'long', timeStyle: 'short' })}`;
+    $('#opFootL').textContent = `จัดทำจากระบบติดตาม %CV POCT Glucose (พัฒนาโดย ทนญ. มุกดารัตน์ สุพัฒน์) · พิมพ์เมื่อ ${new Date().toLocaleString('th-TH', { dateStyle: 'long', timeStyle: 'short' })}`;
     $('#onepage').hidden = false; document.documentElement.classList.add('op-mode'); document.body.style.overflow = 'hidden';
     // chart: pass rate per month up to the reported month, fixed light colours for paper
     const labels = trendMs.map((m) => monthLabel(m)), key = S.level;
