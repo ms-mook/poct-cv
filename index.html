@@ -48,8 +48,35 @@
 
 <div id="toolbar" class="z-30 mx-auto max-w-none px-3 lg:px-6 pt-3 md:sticky md:top-[92px]">
   <div class="glass flex flex-wrap items-center gap-x-4 gap-y-2 px-3 lg:px-6 py-2" role="region" aria-label="ตัวกรอง">
-    <label class="flex items-center gap-2 text-sm font-semibold" for="fySel"><i data-i="calendar-days"></i><span class="hidden sm:inline">ปีงบประมาณ</span></label>
-    <select id="fySel" class="select select-bordered select-sm bg-transparent"></select>
+    <span class="period-ctl flex flex-wrap items-center gap-2" role="group" aria-label="ช่วงเวลา">
+      <label class="flex items-center gap-2 text-sm font-semibold" for="pmSel"><i data-i="calendar-days"></i><span class="hidden sm:inline">ช่วงเวลา</span></label>
+      <select id="pmSel" class="select select-bordered select-sm bg-transparent" aria-label="รูปแบบช่วงเวลา">
+        <option value="fy">ปีงบประมาณ</option>
+        <option value="q">รายไตรมาส (ปีงบ)</option>
+        <option value="h">ครึ่งปีงบประมาณ</option>
+        <option value="cy">ปีปฏิทิน (ม.ค.–ธ.ค.)</option>
+        <option value="last">ย้อนหลัง N เดือน</option>
+        <option value="custom">กำหนดช่วงเอง</option>
+        <option value="all">ทั้งหมด</option>
+      </select>
+      <select id="fySel" class="select select-bordered select-sm bg-transparent" aria-label="ปีงบประมาณ"></select>
+      <select id="qSel" class="select select-bordered select-sm bg-transparent" aria-label="ไตรมาส" hidden>
+        <option value="1">ไตรมาส 1 (ต.ค.–ธ.ค.)</option><option value="2">ไตรมาส 2 (ม.ค.–มี.ค.)</option>
+        <option value="3">ไตรมาส 3 (เม.ย.–มิ.ย.)</option><option value="4">ไตรมาส 4 (ก.ค.–ก.ย.)</option>
+      </select>
+      <select id="hSel" class="select select-bordered select-sm bg-transparent" aria-label="ครึ่งปี" hidden>
+        <option value="1">ครึ่งปีแรก (ต.ค.–มี.ค.)</option><option value="2">ครึ่งปีหลัง (เม.ย.–ก.ย.)</option>
+      </select>
+      <select id="cySel" class="select select-bordered select-sm bg-transparent" aria-label="ปีปฏิทิน (พ.ศ.)" hidden></select>
+      <select id="nSel" class="select select-bordered select-sm bg-transparent" aria-label="จำนวนเดือนย้อนหลัง" hidden>
+        <option value="3">3 เดือนล่าสุด</option><option value="6">6 เดือนล่าสุด</option><option value="12">12 เดือนล่าสุด</option><option value="18">18 เดือนล่าสุด</option><option value="24">24 เดือนล่าสุด</option>
+      </select>
+      <span id="customWrap" class="flex items-center gap-1" hidden>
+        <select id="fromSel" class="select select-bordered select-sm bg-transparent" aria-label="ตั้งแต่เดือน"></select>
+        <span class="text-sm opacity-70">ถึง</span>
+        <select id="toSel" class="select select-bordered select-sm bg-transparent" aria-label="ถึงเดือน"></select>
+      </span>
+    </span>
     <span class="join items-center"><button class="btn btn-sm btn-square join-item" id="monPrev" type="button" aria-label="เดือนก่อนหน้า"><i data-i="chevron-left"></i></button>
       <select id="monSel" class="select select-bordered select-sm join-item bg-transparent" aria-label="เดือน"></select>
       <button class="btn btn-sm btn-square join-item" id="monNext" type="button" aria-label="เดือนถัดไป"><i data-i="chevron-right"></i></button></span>

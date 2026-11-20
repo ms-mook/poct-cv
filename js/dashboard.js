@@ -6,7 +6,7 @@
   const MAX_SEL = 8;
   const NULLROW = { l1: null, l2: null };
 
-  const S = { month: '', group: '', data: null, fy: null, level: 'ALL', selected: [], mean: true, cmp: false, byDev: new Map(), charts: {} };
+  const S = { month: '', group: '', data: null, fy: null, mode: 'fy', q: 1, h: 1, cy: null, n: 6, from: '', to: '', level: 'ALL', selected: [], mean: true, cmp: false, byDev: new Map(), charts: {} };
 
   /* ------------------------------------------------------------ derived data */
   function index() {
@@ -30,7 +30,51 @@
     if (fy === 'all') return [...have].sort();
     return fiscalMonths(fy).filter((m) => have.has(m));
   }
-  const monthsShown = () => (S.month ? [S.month] : monthsOf(S.fy));
+  /* ---- period (time range) filter: fy · quarter · half · calendar year · last N months · custom · all */
+  const shiftM = (m, k) => { const [y, mo] = m.split('-').map(Number); const t = y * 12 + (mo - 1) + k; return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, '0')}`; };
+  const fyMonthsOf = (fy) => (S.mode === 'q' ? fiscalMonths(fy).slice((S.q - 1) * 3, S.q * 3) : S.mode === 'h' ? fiscalMonths(fy).slice((S.h - 1) * 6, S.h * 6) : fiscalMonths(fy));
+  /** calendar bounds [from, to] of the selected period (null for 'all') – months may have no data */
+  function periodBounds() {
+    const all = monthsOf('all'); const last = all[all.length - 1];
+    switch (S.mode) {
+      case 'fy': case 'q': case 'h': { const ms = fyMonthsOf(S.fy); return [ms[0], ms[ms.length - 1]]; }
+      case 'cy': { const y = S.cy - 543; return [`${y}-01`, `${y}-12`]; }
+      case 'last': return last ? [shiftM(last, -(S.n - 1)), last] : null;
+      case 'custom': return S.from && S.to ? [S.from, S.to] : null;
+      default: return null;
+    }
+  }
+  /** months that have data inside the selected period */
+  function rangeMonths() {
+    const all = monthsOf('all'), b = periodBounds();
+    return b ? all.filter((m) => m >= b[0] && m <= b[1]) : all;
+  }
+  const monthsShown = () => (S.month ? [S.month] : rangeMonths());
+  const span = (a, b) => (a === b ? monthLabel(a) : `${monthLabel(a)} – ${monthLabel(b)}`);
+  function rangeTxt() {
+    const b = periodBounds();
+    switch (S.mode) {
+      case 'fy': return `ปีงบประมาณ ${S.fy}`;
+      case 'q': return `ไตรมาส ${S.q} ปีงบประมาณ ${S.fy} (${span(...b)})`;
+      case 'h': return `ครึ่งปี${S.h === 1 ? 'แรก' : 'หลัง'} ปีงบประมาณ ${S.fy} (${span(...b)})`;
+      case 'cy': return `ปี พ.ศ. ${S.cy} (ม.ค.–ธ.ค.)`;
+      case 'last': return b ? `${S.n} เดือนล่าสุด (${span(...b)})` : `${S.n} เดือนล่าสุด`;
+      case 'custom': return b ? `ช่วง ${span(...b)}` : 'ช่วงที่กำหนดเอง';
+      default: return 'ทุกช่วงเวลา';
+    }
+  }
+  /** the same period one year earlier (for comparison) */
+  function prevTxt() {
+    switch (S.mode) {
+      case 'fy': return `ปีงบ ${S.fy - 1}`;
+      case 'q': return `ไตรมาส ${S.q} ปีงบ ${S.fy - 1}`;
+      case 'h': return `ครึ่งปี${S.h === 1 ? 'แรก' : 'หลัง'} ปีงบ ${S.fy - 1}`;
+      case 'cy': return `ปี ${S.cy - 1}`;
+      default: return 'ช่วงเดียวกันปีก่อน';
+    }
+  }
+  /** months of the comparison period, aligned 1:1 with the given months (12 months earlier) */
+  const yearAgo = (ms) => ms.map((m) => shiftM(m, -12));
 
   function monthStat(m, level) {
     let n = 0, p = 0;
@@ -128,7 +172,7 @@
     const all = monthsOf('all'), idx = all.indexOf(last);        // context for "previous month" and streaks (crosses fiscal years)
     let prev = null, prevStat = null;
     for (let i = idx - 1; i >= 0; i--) { const s = monthStat(all[i], lv); if (s.n) { prev = all[i]; prevStat = s; break; } }
-    const trend = (S.fy === 'all' ? all : monthsOf(S.fy)).filter((m) => m <= last);
+    const trend = rangeMonths().filter((m) => m <= last);
     const pcts = trend.map((m) => monthStat(m, lv).pct);
     const trendAll = pcts;
     const active = W().filter((w) => w.active);
@@ -159,10 +203,10 @@
     }
     const valid = months.map((m) => monthStat(m, lv).pct).filter((v) => v !== null);
     const avg = valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : null;
-    // previous fiscal year average (same level)
+    // same period one year earlier (same level)
     let prevFyAvg = null;
-    if (S.fy !== 'all' && !S.month) {
-      const pm = monthsOf(S.fy - 1).map((m) => monthStat(m, lv).pct).filter((v) => v !== null);
+    if (S.mode !== 'all' && !S.month) {
+      const pm = yearAgo(months).map((m) => monthStat(m, lv).pct).filter((v) => v !== null);
       if (pm.length) prevFyAvg = pm.reduce((a, b) => a + b, 0) / pm.length;
     }
     // level comparison over period
@@ -172,7 +216,7 @@
   }
 
   const LV_TXT = () => (S.level === 'ALL' ? 'ผ่านทั้ง L1 และ L2' : S.level);
-  const periodTxt = () => (S.month ? monthLabel(S.month, true) : S.fy === 'all' ? 'ทุกปีงบประมาณ' : `ปีงบประมาณ ${S.fy}`);
+  const periodTxt = () => (S.month ? monthLabel(S.month, true) : rangeTxt());
 
   function renderSummary() {
     const A = analyse(); const kpis = $('#kpis');
@@ -230,7 +274,7 @@
       add('info', 'git-compare', `ตลอด${periodTxt()} <b>${A.l1 < A.l2 ? 'L1' : 'L2'} ไม่ผ่านบ่อยกว่า</b> (เฉลี่ยผ่าน L1 ${A.l1.toFixed(1)}% · L2 ${A.l2.toFixed(1)}%)`);
     if (A.prevFyAvg !== null && A.avg !== null) {
       const d = A.avg - A.prevFyAvg;
-      add(d >= 0 ? 'good' : 'bad', d >= 0 ? 'arrow-up-right' : 'arrow-down-right', `ค่าเฉลี่ยร้อยละผ่านเกณฑ์ปีงบ ${S.fy} = <b>${A.avg.toFixed(1)}%</b> ${d >= 0 ? 'สูงกว่า' : 'ต่ำกว่า'}ปีงบ ${S.fy - 1} (${A.prevFyAvg.toFixed(1)}%) อยู่ ${Math.abs(d).toFixed(1)} จุด`);
+      add(d >= 0 ? 'good' : 'bad', d >= 0 ? 'arrow-up-right' : 'arrow-down-right', `ค่าเฉลี่ยร้อยละผ่านเกณฑ์${periodTxt()} = <b>${A.avg.toFixed(1)}%</b> ${d >= 0 ? 'สูงกว่า' : 'ต่ำกว่า'}${prevTxt()} (${A.prevFyAvg.toFixed(1)}%) อยู่ ${Math.abs(d).toFixed(1)} จุด`);
     } else if (A.avg !== null) add('info', 'info', `ค่าเฉลี่ยร้อยละผ่านเกณฑ์ ${periodTxt()} = <b>${A.avg.toFixed(1)}%</b>${A.months.length > 1 ? ` (${A.months.length} เดือน)` : ''}`);
     $('#insights').innerHTML = ins.join('');
 
@@ -278,14 +322,14 @@
     }));
     // previous fiscal year overlay (same calendar months)
     let prevStats = null;
-    const canCmp = S.fy !== 'all' && monthsOf(S.fy - 1).length > 0;
+    const have = new Set(monthsOf('all'));
+    const canCmp = S.mode !== 'all' && yearAgo(months).some((m) => have.has(m));
     $('#chkCmp').disabled = !canCmp;
     if (S.cmp && canCmp) {
-      const cur = fiscalMonths(S.fy), old = fiscalMonths(S.fy - 1);
       const key = lv === 'ALL' ? 'ALL' : lv;
-      prevStats = months.map((m) => { const i = cur.indexOf(m); return monthStat(old[i], key); });
+      prevStats = yearAgo(months).map((m) => monthStat(m, key));
       datasets.push({
-        type: 'line', label: `ปีงบ ${S.fy - 1} (${lv === 'ALL' ? 'ผ่านทั้งคู่' : lv})`, data: prevStats.map((s) => s.pct), borderColor: css('--prev'), backgroundColor: css('--prev'),
+        type: 'line', label: `${prevTxt()} (${lv === 'ALL' ? 'ผ่านทั้งคู่' : lv})`, data: prevStats.map((s) => s.pct), borderColor: css('--prev'), backgroundColor: css('--prev'),
         borderDash: [6, 4], borderWidth: 2.5, pointRadius: 3.5, pointStyle: 'rectRot', tension: .15, order: 0, spanGaps: false
       });
     }
@@ -406,16 +450,16 @@
     });
     const csv = '﻿' + lines.map((l) => l.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-    a.download = `cv-${S.month || (S.fy === 'all' ? 'all' : 'FY' + S.fy)}${S.group ? '-' + S.group : ''}-${lv}.csv`; a.click(); URL.revokeObjectURL(a.href);
+    a.download = `cv-${S.month || periodSlug()}${S.group ? '-' + S.group : ''}-${lv}.csv`; a.click(); URL.revokeObjectURL(a.href);
     toast('ดาวน์โหลด CSV แล้ว', 'success');
   }
 
   /* ------------------------------------------------------------ ward detail dialog */
   function openDetail(dev) {
     const w = wardByDev(dev); if (!w) return;
-    const months = S.fy === 'all' ? monthsOf('all') : monthsOf(S.fy), t = thr();
+    const months = rangeMonths(), t = thr();
     $('#dTitle').textContent = w.ward;
-    $('#dSub').textContent = `เครื่อง ${w.device} · ${S.fy === 'all' ? 'ทุกปีงบประมาณ' : 'ปีงบประมาณ ' + S.fy} · เกณฑ์ผ่าน %CV < ${t}%`;
+    $('#dSub').textContent = `เครื่อง ${w.device} · ${rangeTxt()} · เกณฑ์ผ่าน %CV < ${t}%`;
     const st = wardStats(dev, months, 'ALL');
     const lastR = [...months].reverse().map((m) => rowOf(dev, m)).find((r) => hasValue(r));
     $('#dChips').innerHTML = `<span class="badge ${st.fails ? 'badge-error' : 'badge-success'} gap-1">${icon(st.fails ? 'triangle-alert' : 'circle-check')} ไม่ผ่าน ${st.fails}/${st.n} เดือน</span>
@@ -444,7 +488,7 @@
   const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
   const sd = (a) => { if (a.length < 2) return null; const m = mean(a); return Math.sqrt(a.reduce((x, y) => x + (y - m) ** 2, 0) / (a.length - 1)); };
   /** months of the fiscal-year context up to the last shown month (used when a single month is selected) */
-  const contextMonths = () => { const ms = monthsShown(); const last = ms[ms.length - 1]; return (S.fy === 'all' ? monthsOf('all') : monthsOf(S.fy)).filter((m) => m <= last); };
+  const contextMonths = () => { const ms = monthsShown(); const last = ms[ms.length - 1]; return rangeMonths().filter((m) => m <= last); };
   const wardBtn = (w, right, extra = '') => `<button type="button" class="mover" data-open="${esc(w.device)}" title="${esc(w.ward)} · ${esc(w.device)}"><span class="nm">${esc(shortWard(w))}</span>${extra}<span class="dv">${right}</span></button>`;
 
   const quadLines = {
@@ -552,7 +596,7 @@
   function openOnePage() {
     const A = analyse(); if (!A) return toast('ยังไม่มีข้อมูล', 'warning');
     const t = thr(), tg = S.data.target, s = A.lastStat;
-    $('#opSub').textContent = `โรงพยาบาลศรีนครินทร์ · เครื่อง ACCU-Chek Inform II · ข้อมูลเดือน ${monthLabel(A.last, true)} (${S.fy === 'all' ? 'ทุกปีงบประมาณ' : 'ปีงบประมาณ ' + S.fy}) · ${LV_TXT()}${S.group ? ' · กลุ่ม ' + S.group : ''} · เกณฑ์ผ่าน %CV < ${t} · เป้าหมาย ≥ ${tg}%`;
+    $('#opSub').textContent = `โรงพยาบาลศรีนครินทร์ · เครื่อง ACCU-Chek Inform II · ข้อมูลเดือน ${monthLabel(A.last, true)} (${rangeTxt()}) · ${LV_TXT()}${S.group ? ' · กลุ่ม ' + S.group : ''} · เกณฑ์ผ่าน %CV < ${t} · เป้าหมาย ≥ ${tg}%`;
     const pct = s.pct, dP = pct !== null && A.prevStat?.pct != null ? pct - A.prevStat.pct : null;
     const col = pct === null ? '#555' : pct >= tg ? '#17794a' : pct >= tg - 10 ? '#a15c07' : '#b4231f';
     const kpi = (k, v, d, c) => `<div class="op-kpi"><div class="k">${k}</div><div class="v" style="color:${c || '#111'}">${v}</div><div class="d">${d}</div></div>`;
@@ -562,8 +606,8 @@
       + kpi('ความครบถ้วนของข้อมูล', A.active ? Math.round((A.recorded / A.active) * 100) + '%' : '–', `บันทึก ${A.recorded}/${A.active} หอ${A.nd ? ` · ND ${A.nd}` : ''}`, A.missing.length ? '#a15c07' : '#17794a');
     // notes
     const notes = [];
-    if (A.avg !== null) notes.push(`ค่าเฉลี่ยร้อยละผ่านเกณฑ์ ${S.month ? monthLabel(S.month, true) : periodTxt()} = ${A.avg.toFixed(1)}%${A.prevFyAvg !== null ? ` (ปีงบก่อน ${A.prevFyAvg.toFixed(1)}%)` : ''}`);
-    const trendMs = (S.fy === 'all' ? monthsOf('all') : monthsOf(S.fy)).filter((m) => m <= A.last);
+    if (A.avg !== null) notes.push(`ค่าเฉลี่ยร้อยละผ่านเกณฑ์ ${periodTxt()} = ${A.avg.toFixed(1)}%${A.prevFyAvg !== null ? ` (${prevTxt()} ${A.prevFyAvg.toFixed(1)}%)` : ''}`);
+    const trendMs = rangeMonths().filter((m) => m <= A.last);
     const met = trendMs.filter((m) => (monthStat(m, S.level).pct ?? -1) >= tg).length;
     notes.push(`ถึงเป้าหมาย ${tg}% จำนวน ${met} จาก ${trendMs.length} เดือน`);
     if (A.l1 !== null && A.l2 !== null) notes.push(`ร้อยละผ่านเฉลี่ย L1 ${A.l1.toFixed(1)}% · L2 ${A.l2.toFixed(1)}%`);
@@ -608,15 +652,32 @@
   }
   function syncUrl() {
     const p = new URLSearchParams();
-    p.set('fy', S.fy); p.set('lv', S.level); if (S.group) p.set('g', S.group); if (S.month) p.set('m', S.month);
+    p.set('p', S.mode);
+    if (['fy', 'q', 'h'].includes(S.mode)) p.set('fy', S.fy);
+    if (S.mode === 'q') p.set('q', S.q); if (S.mode === 'h') p.set('h', S.h);
+    if (S.mode === 'cy') p.set('y', S.cy); if (S.mode === 'last') p.set('n', S.n);
+    if (S.mode === 'custom') { p.set('from', S.from); p.set('to', S.to); }
+    p.set('lv', S.level); if (S.group) p.set('g', S.group); if (S.month) p.set('m', S.month);
     if (S.selected.length) p.set('w', S.selected.join(','));
     if (S.cmp) p.set('cmp', '1');
     if (/[?&]demo=1\b/.test(location.search)) p.set('demo', '1');
     history.replaceState(null, '', '?' + p.toString() + location.hash);
   }
+  const periodSlug = () => ({ fy: `FY${S.fy}`, q: `FY${S.fy}-Q${S.q}`, h: `FY${S.fy}-H${S.h}`, cy: `CY${S.cy}`, last: `last${S.n}m`, custom: `${S.from}_${S.to}` }[S.mode] || 'all');
+  function syncPeriodUi() {
+    $('#pmSel').value = S.mode;
+    $('#fySel').hidden = !['fy', 'q', 'h'].includes(S.mode); $('#fySel').value = S.fy;
+    $('#qSel').hidden = S.mode !== 'q'; $('#qSel').value = S.q;
+    $('#hSel').hidden = S.mode !== 'h'; $('#hSel').value = S.h;
+    $('#cySel').hidden = S.mode !== 'cy'; $('#cySel').value = S.cy;
+    $('#nSel').hidden = S.mode !== 'last'; $('#nSel').value = S.n;
+    $('#customWrap').hidden = S.mode !== 'custom'; $('#fromSel').value = S.from; $('#toSel').value = S.to;
+  }
   function fillMonths() {
-    const ms = monthsOf(S.fy); if (S.month && !ms.includes(S.month)) S.month = '';
-    $('#monSel').innerHTML = '<option value="">ทั้ง' + (S.fy === 'all' ? 'หมด' : 'ปีงบประมาณ') + '</option>' + [...ms].reverse().map((m) => `<option value="${m}">${monthLabel(m, true)}</option>`).join('');
+    syncPeriodUi();
+    const ms = rangeMonths(); if (S.month && !ms.includes(S.month)) S.month = '';
+    const allLbl = { fy: 'ทั้งปีงบประมาณ', q: 'ทั้งไตรมาส', h: 'ทั้งครึ่งปี', cy: 'ทั้งปี', all: 'ทุกเดือน' }[S.mode] || 'ทั้งช่วงที่เลือก';
+    $('#monSel').innerHTML = `<option value="">${allLbl} (${ms.length} เดือน)</option>` + [...ms].reverse().map((m) => `<option value="${m}">${monthLabel(m, true)}</option>`).join('');
     $('#monSel').value = S.month;
     const i = ms.indexOf(S.month); $('#monPrev').disabled = !S.month || i <= 0; $('#monNext').disabled = !S.month || i >= ms.length - 1;
   }
@@ -628,8 +689,10 @@
     $('#printTitle').textContent = `รายงาน %CV POCT Glucose · รพ.ศรีนครินทร์ · ${periodTxt()} · ${LV_TXT()}${S.group ? ' · กลุ่ม ' + S.group : ''} · พิมพ์เมื่อ ${new Date().toLocaleDateString('th-TH')}`;
     renderSummary(); renderGroups();
     if (!monthsShown().length) {
-      for (const k of ['bar', 'line']) S.charts[k]?.destroy();
-      $('#barTable').innerHTML = ''; $('#matrix').innerHTML = '<tbody><tr><td class="p-6" style="text-align:center">ยังไม่มีข้อมูลในปีงบประมาณนี้</td></tr></tbody>';
+      for (const k of ['bar', 'line', 'scatter']) S.charts[k]?.destroy();
+      $('#barTable').innerHTML = ''; $('#matrix').innerHTML = '<tbody><tr><td class="p-6" style="text-align:center">ยังไม่มีข้อมูลในช่วงเวลาที่เลือก</td></tr></tbody>';
+      $('#barTable').innerHTML = ''; $('#wardList').innerHTML = ''; $('#chips').innerHTML = '';
+      syncUrl();
       return;
     }
     renderBar(); renderPicker(); renderLine(); renderMatrix(); renderAnalysis(); syncUrl();
@@ -660,25 +723,62 @@
       : 'โหมดตัวอย่าง – กำลังแสดงข้อมูลสำรองจากไฟล์ Excel ปี 2568–2569 (API_BASE ใน config.js เว้นว่างไว้)');
 
     const fys = [...new Set(data.rows.map((r) => r.fy))].sort((a, b) => b - a);
-    $('#fySel').innerHTML = fys.map((f) => `<option value="${f}">${f}</option>`).join('') + '<option value="all">ทุกปี (รวม)</option>';
+    const allMs = monthsOf('all'), lastM = allMs[allMs.length - 1] || '';
+    const cys = [...new Set(allMs.map((m) => Number(m.slice(0, 4)) + 543))].sort((a, b) => b - a);
+    $('#fySel').innerHTML = fys.map((f) => `<option value="${f}">${f}</option>`).join('');
+    $('#cySel').innerHTML = cys.map((y) => `<option value="${y}">พ.ศ. ${y}</option>`).join('');
+    const monOpts = [...allMs].reverse().map((m) => `<option value="${m}">${monthLabel(m, true)}</option>`).join('');
+    $('#fromSel').innerHTML = monOpts; $('#toSel').innerHTML = monOpts;
     const q = new URLSearchParams(location.search);
-    S.fy = q.get('fy') === 'all' ? 'all' : fys.includes(Number(q.get('fy'))) ? Number(q.get('fy')) : (fys[0] ?? 'all');
+    const fyIdx = (m) => Math.floor(fiscalMonths(CV.fiscalYear(m)).indexOf(m));      // 0..11 within its fiscal year
+    // defaults follow the latest month that has data
+    S.fy = fys[0] ?? null; S.cy = cys[0] ?? null;
+    S.q = lastM ? Math.floor(fyIdx(lastM) / 3) + 1 : 1; S.h = lastM ? Math.floor(fyIdx(lastM) / 6) + 1 : 1;
+    S.from = allMs[Math.max(0, allMs.length - 6)] || ''; S.to = lastM;
+    // URL (backward compatible with ?fy=all / ?fy=2569)
+    const modes = ['fy', 'q', 'h', 'cy', 'last', 'custom', 'all'];
+    S.mode = modes.includes(q.get('p')) ? q.get('p') : q.get('fy') === 'all' ? 'all' : 'fy';
+    if (fys.includes(Number(q.get('fy')))) S.fy = Number(q.get('fy'));
+    if (['1', '2', '3', '4'].includes(q.get('q'))) S.q = Number(q.get('q'));
+    if (['1', '2'].includes(q.get('h'))) S.h = Number(q.get('h'));
+    if (cys.includes(Number(q.get('y')))) S.cy = Number(q.get('y'));
+    if ([3, 6, 12, 18, 24].includes(Number(q.get('n')))) S.n = Number(q.get('n'));
+    if (allMs.includes(q.get('from'))) S.from = q.get('from');
+    if (allMs.includes(q.get('to'))) S.to = q.get('to');
+    if (S.from > S.to) [S.from, S.to] = [S.to, S.from];
+    if (S.fy === null && ['fy', 'q', 'h'].includes(S.mode)) S.mode = 'all';
     S.level = ['L1', 'L2', 'ALL'].includes(q.get('lv')) ? q.get('lv') : 'ALL';
     const groups = [...new Set(data.wards.map((w) => w.group).filter(Boolean))];
     $('#grpWrap').hidden = !groups.length;
     $('#grpSel').innerHTML = '<option value="">ทุกกลุ่มหอ</option>' + groups.map((g) => `<option>${esc(g)}</option>`).join('');
     S.group = groups.includes(q.get('g')) ? q.get('g') : ''; $('#grpSel').value = S.group;
     S.cmp = q.get('cmp') === '1'; $('#chkCmp').checked = S.cmp;
-    $('#fySel').value = S.fy;
-    { const m = q.get('m'); S.month = m && monthsOf(S.fy).includes(m) ? m : ''; }
+    { const m = q.get('m'); S.month = m && rangeMonths().includes(m) ? m : ''; }
     const w = (q.get('w') || '').split(',').filter((d) => wardByDev(d));
     S.selected = w.length ? w.slice(0, MAX_SEL) : topFailing(3);
 
-    $('#fySel').onchange = (e) => { S.fy = e.target.value === 'all' ? 'all' : Number(e.target.value); S.month = ''; S.selected = topFailing(3); renderAll(); };
+    const setPeriod = (patch) => { Object.assign(S, patch); S.month = ''; S.selected = topFailing(3); renderAll(); };
+    $('#pmSel').onchange = (e) => {
+      const mode = e.target.value, cur = rangeMonths();
+      const patch = { mode };
+      // carry the current view over so switching mode doesn't jump somewhere unexpected
+      const ref = cur[cur.length - 1] || lastM;
+      if (ref && ['fy', 'q', 'h'].includes(mode)) { const f = CV.fiscalYear(ref); if (fys.includes(f)) patch.fy = f; patch.q = Math.floor(fyIdx(ref) / 3) + 1; patch.h = Math.floor(fyIdx(ref) / 6) + 1; }
+      if (ref && mode === 'cy') { const y = Number(ref.slice(0, 4)) + 543; if (cys.includes(y)) patch.cy = y; }
+      if (mode === 'custom' && cur.length) { patch.from = cur[0]; patch.to = cur[cur.length - 1]; }
+      setPeriod(patch);
+    };
+    $('#fySel').onchange = (e) => setPeriod({ fy: Number(e.target.value) });
+    $('#qSel').onchange = (e) => setPeriod({ q: Number(e.target.value) });
+    $('#hSel').onchange = (e) => setPeriod({ h: Number(e.target.value) });
+    $('#cySel').onchange = (e) => setPeriod({ cy: Number(e.target.value) });
+    $('#nSel').onchange = (e) => setPeriod({ n: Number(e.target.value) });
+    const setRange = () => { let a = $('#fromSel').value, b = $('#toSel').value; if (a > b) { [a, b] = [b, a]; toast('สลับช่วงให้ "ตั้งแต่" มาก่อน "ถึง" แล้ว', 'info'); } setPeriod({ from: a, to: b }); };
+    $('#fromSel').onchange = setRange; $('#toSel').onchange = setRange;
     const setMonth = (m) => { S.month = m; S.selected = topFailing(3); renderAll(); };
     $('#monSel').onchange = (e) => setMonth(e.target.value);
-    $('#monPrev').onclick = () => { const ms = monthsOf(S.fy), i = ms.indexOf(S.month); if (i > 0) setMonth(ms[i - 1]); };
-    $('#monNext').onclick = () => { const ms = monthsOf(S.fy), i = ms.indexOf(S.month); if (i >= 0 && i < ms.length - 1) setMonth(ms[i + 1]); };
+    $('#monPrev').onclick = () => { const ms = rangeMonths(), i = ms.indexOf(S.month); if (i > 0) setMonth(ms[i - 1]); };
+    $('#monNext').onclick = () => { const ms = rangeMonths(), i = ms.indexOf(S.month); if (i >= 0 && i < ms.length - 1) setMonth(ms[i + 1]); };
     $('#lvlSeg').onclick = (e) => { const b = e.target.closest('button[data-level]'); if (!b) return; S.level = b.dataset.level; renderAll(); };
     const setGroup = (g) => { S.group = g; $('#grpSel').value = g; S.selected = topFailing(3); renderAll(); };
     $('#grpSel').onchange = (e) => setGroup(e.target.value);
